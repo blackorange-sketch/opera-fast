@@ -7,7 +7,7 @@ source.include_exts = py,kv,png,jpg,json,html,css,js,gz
 version = 0.1.0
 
 blacklist_requirements = libthorvg
-requirements = python3==3.10.11,hostpython3==3.10.11,kivy==2.2.1,pyjnius,android,cryptography,sqlite3
+requirements = python3==3.10.11,hostpython3==3.10.11,kivy==2.2.1,pyjnius,android
 
 orientation = portrait
 fullscreen = 0
@@ -21,5 +21,5 @@ android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.allow_backup = True
 
-p4a.branch = develop
+p4a.branch = master
 p4a.extra_args = --recipe-blacklist=libthorvg
