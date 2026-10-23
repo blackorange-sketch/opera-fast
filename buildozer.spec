@@ -22,4 +22,4 @@ android.accept_sdk_license = True
 android.allow_backup = True
 
 p4a.branch = master
-p4a.extra_args = --recipe-blacklist=libthorvg
+p4a.extra_args = --recipe-blacklist=libthorvg --jobs=$(nproc)
