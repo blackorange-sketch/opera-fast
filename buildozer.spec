@@ -6,6 +6,7 @@ source.dir = .
 source.include_exts = py,kv,png,jpg,json,html,css,js,gz
 version = 0.1.0
 
+blacklist_requirements = libthorvg
 requirements = python3==3.10.11,hostpython3==3.10.11,kivy==2.2.1,pyjnius,android,cryptography,sqlite3
 
 orientation = portrait
