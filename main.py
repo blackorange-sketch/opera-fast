@@ -166,6 +166,11 @@ class BrowserRoot(BoxLayout):
             return "https://" + raw
         return "https://duckduckgo.com/?q=" + raw.replace(" ", "+")
 
+    def _on_shield_tap(self, *_):
+        blocked, total = adblock.get_stats()
+        log(f"[main] shield tapped: blocked={blocked} total_rules={total}")
+        # TODO Phase 2.2: native AlertDialog with stats + toggle + whitelist
+
     def _navigate(self, raw: str):
         url = self._parse_url(raw)
         if not url:
