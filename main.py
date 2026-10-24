@@ -1,5 +1,6 @@
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.widget import Widget
 from kivy.clock import Clock
 from kivy.metrics import dp
@@ -8,8 +9,16 @@ from kivy.graphics import Color as GColor, Rectangle
 
 from webview.engine import WebViewEngine
 from core.log import clear_log, log
-from ui.theme import BG_APP
+from core.tabs import TabManager, DEFAULT_URL
+from core.session import save_session, load_session
+from ui.theme import BG_APP, TOOLBAR_HEIGHT_DP
 from ui.toolbar import Toolbar
+from ui.speed_dial import SpeedDial
+from ui.sidebar import Sidebar
+
+
+def _is_blank(url: str) -> bool:
+    return (not url) or url == DEFAULT_URL or url == "about:blank"
 
 
 class BrowserRoot(BoxLayout):
@@ -17,7 +26,7 @@ class BrowserRoot(BoxLayout):
         super().__init__(orientation="vertical", **kw)
         clear_log()
 
-        # Dark background for the whole app
+        # Dark background
         with self.canvas.before:
             GColor(*BG_APP)
             self._bg = Rectangle(pos=self.pos, size=self.size)
@@ -26,63 +35,163 @@ class BrowserRoot(BoxLayout):
             size=lambda *a: setattr(self._bg, "size", self.size),
         )
 
-        self.engine = WebViewEngine(top_bar_height_px=int(dp(52)))
+        # Tabs (restore session if available)
+        self.tabs = TabManager()
+        if load_session(self.tabs):
+            log("[main] session restored")
+        else:
+            log("[main] new session")
 
+        # Toolbar
         self.toolbar = Toolbar(callbacks={
             "on_back":    lambda *_: self.engine.go_back(),
             "on_forward": lambda *_: self.engine.go_forward(),
             "on_reload":  lambda *_: self.engine.reload(),
             "on_go":      self._navigate,
-            "on_tabs":    self._on_tabs,
-            "on_menu":    self._on_menu,
+            "on_tabs":    self._show_sidebar,
+            "on_menu":    lambda *_: log("[main] menu (todo)"),
         })
         self.add_widget(self.toolbar)
 
-        # Placeholder so screen is not black before WebView covers it
-        self.placeholder = Widget()
-        with self.placeholder.canvas.before:
+        # Content area (FloatLayout so speed dial / sidebar can overlap)
+        self.content = FloatLayout()
+        with self.content.canvas.before:
             GColor(*BG_APP)
-            self._ph = Rectangle(
-                pos=self.placeholder.pos, size=self.placeholder.size
+            self._content_bg = Rectangle(
+                pos=self.content.pos, size=self.content.size
             )
-        self.placeholder.bind(
-            pos=lambda *a: setattr(self._ph, "pos", self.placeholder.pos),
-            size=lambda *a: setattr(self._ph, "size", self.placeholder.size),
+        self.content.bind(
+            pos=lambda *a: setattr(self._content_bg, "pos", self.content.pos),
+            size=lambda *a: setattr(self._content_bg, "size", self.content.size),
         )
-        self.add_widget(self.placeholder)
+        self.add_widget(self.content)
+
+        # Speed dial (visible when active tab is blank)
+        self.speed_dial = SpeedDial(on_open=self._navigate)
+        self.content.add_widget(self.speed_dial)
+
+        # Sidebar (created on demand)
+        self.sidebar = None
+
+        # Engine
+        self.engine = WebViewEngine(top_bar_height_px=int(dp(TOOLBAR_HEIGHT_DP)))
 
         if platform == "android":
             Clock.schedule_once(self._boot_engine, 0.8)
 
+    # ---------- boot ----------
     def _boot_engine(self, _):
         try:
             log("[main] booting engine")
             self.engine.attach(None)
-            self.engine.load("https://duckduckgo.com")
-            self.toolbar.set_url("https://duckduckgo.com")
+            self._sync_to_active_tab(initial=True)
         except Exception as e:
             import traceback
             log(f"[main] boot EXC: {e}")
             log(traceback.format_exc())
 
-    def _on_tabs(self, *_):
-        log("[main] tabs button pressed (not wired yet)")
+    # ---------- state sync ----------
+    def _sync_to_active_tab(self, initial=False):
+        tab = self.tabs.active
+        if tab is None:
+            # shouldn't happen — TabManager always has >=1 tab
+            self.tabs.add_tab(activate=True)
+            tab = self.tabs.active
 
-    def _on_menu(self, *_):
-        log("[main] menu button pressed (not wired yet)")
+        if _is_blank(tab.url):
+            self._show_speed_dial()
+            self.toolbar.set_url("")
+        else:
+            self.toolbar.set_url(tab.url)
+            self._show_webview(tab.url if initial else None)
 
-    def _navigate(self, raw):
+    def _show_speed_dial(self):
+        self.engine.set_visible(False)
+        self.speed_dial.opacity = 1
+        self.speed_dial.disabled = False
+
+    def _show_webview(self, url=None):
+        self.speed_dial.opacity = 0
+        self.speed_dial.disabled = True
+        self.engine.set_visible(True)
+        if url:
+            self.engine.load(url)
+
+    # ---------- navigation ----------
+    def _parse_url(self, raw: str) -> str:
         raw = (raw or "").strip()
         if not raw:
-            return
+            return ""
         if raw.startswith(("http://", "https://")):
-            url = raw
-        elif "." in raw and " " not in raw:
-            url = "https://" + raw
-        else:
-            url = "https://duckduckgo.com/?q=" + raw.replace(" ", "+")
-        self.engine.load(url)
+            return raw
+        if "." in raw and " " not in raw:
+            return "https://" + raw
+        return "https://duckduckgo.com/?q=" + raw.replace(" ", "+")
+
+    def _navigate(self, raw: str):
+        url = self._parse_url(raw)
+        if not url:
+            return
+        tab = self.tabs.active
+        if tab:
+            self.tabs.update_tab(tab.id, url=url, title=raw)
+        if self.sidebar is not None:
+            self.content.remove_widget(self.sidebar)
+            self.sidebar = None
         self.toolbar.set_url(url)
+        self._show_webview(url)
+        save_session(self.tabs)
+
+    # ---------- sidebar ----------
+    def _show_sidebar(self, *_):
+        log("[main] opening sidebar")
+        self.engine.set_visible(False)
+        self.speed_dial.opacity = 0
+        self.speed_dial.disabled = True
+
+        if self.sidebar is not None:
+            self.content.remove_widget(self.sidebar)
+
+        self.sidebar = Sidebar(
+            tabs=self.tabs.tabs,
+            callbacks={
+                "active_id": self.tabs.active_id,
+                "on_close": self._hide_sidebar,
+                "on_select": self._select_tab,
+                "on_new_tab": self._new_tab,
+                "on_close_tab": self._close_tab,
+            },
+        )
+        self.content.add_widget(self.sidebar)
+
+    def _hide_sidebar(self, *_):
+        if self.sidebar is not None:
+            self.content.remove_widget(self.sidebar)
+            self.sidebar = None
+        self._sync_to_active_tab()
+
+    def _select_tab(self, tab_id):
+        self.tabs.activate(tab_id)
+        self._hide_sidebar()
+        save_session(self.tabs)
+
+    def _new_tab(self, *_):
+        self.tabs.add_tab(activate=True)
+        self._hide_sidebar()
+        save_session(self.tabs)
+
+    def _close_tab(self, tab_id):
+        self.tabs.close_tab(tab_id)
+        if self.tabs.count() == 0:
+            self.tabs.add_tab(activate=True)
+        # Refresh sidebar (re-create with updated list) if still open
+        if self.sidebar is not None:
+            self.content.remove_widget(self.sidebar)
+            self.sidebar = None
+            self._show_sidebar()
+        else:
+            self._sync_to_active_tab()
+        save_session(self.tabs)
 
 
 class OperaFastApp(App):

@@ -1,4 +1,4 @@
-"""Android WebView wrapper for OperaFast (diagnostic, no WindowManager)."""
+"""Android WebView wrapper for OperaFast."""
 import traceback
 from kivy.utils import platform
 
@@ -10,6 +10,7 @@ class WebViewEngine:
         self._wv = None
         self._top_bar_height_px = int(top_bar_height_px)
         self._pending_url = None
+        self._pending_visible = True
 
     def attach(self, kivy_slot):
         if platform != "android":
@@ -25,6 +26,7 @@ class WebViewEngine:
         LayoutParams = autoclass("android.view.ViewGroup$LayoutParams")
         MarginLayoutParams = autoclass("android.view.ViewGroup$MarginLayoutParams")
         Color = autoclass("android.graphics.Color")
+        View = autoclass("android.view.View")
 
         engine_ref = self
 
@@ -37,14 +39,9 @@ class WebViewEngine:
                 if act is None:
                     return
 
-                log("[engine] step 2: construct WebView")
                 wv = WebView(act)
-                log("[engine] wv created")
-
-                log("[engine] step 3: bg color WHITE")
                 wv.setBackgroundColor(Color.WHITE)
 
-                log("[engine] step 4: settings")
                 s = wv.getSettings()
                 s.setJavaScriptEnabled(True)
                 s.setDomStorageEnabled(True)
@@ -55,54 +52,57 @@ class WebViewEngine:
                 s.setMediaPlaybackRequiresUserGesture(False)
                 s.setLoadWithOverviewMode(True)
                 s.setUseWideViewPort(True)
-                log("[engine] settings OK")
 
-                log("[engine] step 5: setWebViewClient")
                 wv.setWebViewClient(WebViewClient())
-                log("[engine] client OK")
 
-                log("[engine] step 6: layout params")
                 params = MarginLayoutParams(
                     LayoutParams.MATCH_PARENT,
                     LayoutParams.MATCH_PARENT,
                 )
                 params.topMargin = engine_ref._top_bar_height_px
-                log("[engine] params OK")
 
-                log("[engine] step 7: addContentView")
                 act.addContentView(wv, params)
                 log("[engine] addContentView OK")
 
-                try:
-                    wv.bringToFront()
-                    log("[engine] bringToFront OK")
-                except Exception as e:
-                    log(f"[engine] bringToFront failed: {e}")
-
                 engine_ref._wv = wv
-                log("[engine] wv assigned")
+
+                if not engine_ref._pending_visible:
+                    wv.setVisibility(View.GONE)
+                    log("[engine] initial visibility: GONE")
 
                 if engine_ref._pending_url:
                     url = engine_ref._pending_url
                     engine_ref._pending_url = None
-                    log(f"[engine] step 8: load({url})")
+                    log(f"[engine] load({url})")
                     wv.loadUrl(url)
-                else:
-                    log("[engine] step 8: load(about:blank)")
-                    wv.loadUrl("about:blank")
 
                 log("[engine] done")
             except Exception as e:
                 log(f"[engine] EXC: {e}")
                 log(traceback.format_exc())
 
-        log("[engine] attach: calling _create()")
         _create()
-        log("[engine] attach: returned")
 
     def _ui(self, fn):
         from android.runnable import run_on_ui_thread
         run_on_ui_thread(fn)()
+
+    def set_visible(self, visible: bool):
+        """Show/hide WebView. Hidden state lets Kivy widgets (speed dial,
+        sidebar) become visible because native WebView otherwise covers them."""
+        self._pending_visible = visible
+        if self._wv is None:
+            log(f"[engine] set_visible({visible}) — queued")
+            return
+        def _toggle():
+            try:
+                from jnius import autoclass
+                View = autoclass("android.view.View")
+                self._wv.setVisibility(View.VISIBLE if visible else View.GONE)
+                log(f"[engine] visibility -> {'VISIBLE' if visible else 'GONE'}")
+            except Exception as e:
+                log(f"[engine] set_visible EXC: {e}")
+        self._ui(_toggle)
 
     def load(self, url):
         if self._wv is None:
