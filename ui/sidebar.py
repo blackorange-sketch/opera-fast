@@ -54,7 +54,7 @@ class Sidebar(FloatLayout):
             valign="middle",
         ))
         btn_close = Button(
-            text="\u2715",  # ✕
+            text="\ue5cd",  # ✕
             size_hint_x=None,
             width=dp(48),
             background_normal="",
@@ -147,7 +147,7 @@ class Sidebar(FloatLayout):
         row.add_widget(btn_title)
 
         btn_x = Button(
-            text="\u2715",
+            text="\ue5cd",
             size_hint_x=None,
             width=dp(48),
             background_normal="",

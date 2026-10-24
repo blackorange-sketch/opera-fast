@@ -61,8 +61,19 @@ class WebViewEngine:
                 s.setLoadWithOverviewMode(True)
                 s.setUseWideViewPort(True)
 
-                wv.setWebViewClient(WebViewClient())
-                log("[engine] plain WebViewClient installed")
+                # Use native Java AdBlockClient (extends WebViewClient).
+                # If class is missing (e.g. during local dev), fall back
+                # to plain WebViewClient so the app still works.
+                try:
+                    AdBlockClient = autoclass(
+                        "org.blackorange.operafast.AdBlockClient"
+                    )
+                    wv.setWebViewClient(AdBlockClient())
+                    log("[engine] AdBlockClient installed")
+                except Exception as ex:
+                    log(f"[engine] AdBlockClient missing, fallback: {ex}")
+                    wv.setWebViewClient(WebViewClient())
+                    log("[engine] plain WebViewClient installed")
 
                 params = MarginLayoutParams(
                     LayoutParams.MATCH_PARENT,

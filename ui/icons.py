@@ -9,12 +9,14 @@ ICON_FORWARD = "\ue5c8"
 ICON_RELOAD  = "\ue5d5"
 ICON_TABS    = "\ue3c2"
 ICON_MENU    = "\ue5d4"
+ICON_SHIELD  = "\ue32a"   # security (shield)
 
 FB_BACK    = "<"
 FB_FORWARD = ">"
 FB_RELOAD  = "R"
 FB_TABS    = "T"
 FB_MENU    = "M"
+FB_SHIELD  = "S"
 
 FONT_NAME = "MaterialIcons"
 
@@ -82,3 +84,7 @@ def icon_tabs():
 
 def icon_menu():
     return _pick(ICON_MENU, FB_MENU)
+
+
+def icon_shield():
+    return _pick(ICON_SHIELD, FB_SHIELD)

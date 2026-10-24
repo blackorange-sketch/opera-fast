@@ -10,6 +10,7 @@ from webview.engine import WebViewEngine
 from core.log import clear_log, log
 from core.tabs import TabManager, DEFAULT_URL
 from core.session import save_session, load_session
+from core import adblock
 from ui.theme import BG_APP, TOOLBAR_HEIGHT_DP
 from ui.toolbar import Toolbar
 from ui.speed_dial import SpeedDial
@@ -73,6 +74,7 @@ class BrowserRoot(BoxLayout):
         # Track last-polled values to avoid churning UI every 0.5s
         self._last_polled_url = None
         self._last_polled_title = None
+        self._last_blocked_count = 0
 
         if platform == "android":
             Clock.schedule_once(self._boot_engine, 0.8)
@@ -82,6 +84,7 @@ class BrowserRoot(BoxLayout):
     def _boot_engine(self, _):
         try:
             log("[main] booting engine")
+            adblock.install()
             self.engine.attach(None)
             self._sync_to_active_tab(initial=True)
         except Exception as e:
@@ -112,6 +115,12 @@ class BrowserRoot(BoxLayout):
             tab = self.tabs.active
             if tab is not None:
                 self.tabs.update_tab(tab.id, title=title)
+
+        # Adblock stats: log when counter increases (throttled by 1 log/5s)
+        blocked, total = adblock.get_stats()
+        if blocked > self._last_blocked_count:
+            self._last_blocked_count = blocked
+            log(f"[adblock] blocked total: {blocked}/{total} rules")
         return True
 
     # ---------- state sync ----------
@@ -142,6 +151,7 @@ class BrowserRoot(BoxLayout):
         # Reset polling cache so next poll picks up fresh URL
         self._last_polled_url = None
         self._last_polled_title = None
+        self._last_blocked_count = 0
 
     # ---------- navigation ----------
     def _parse_url(self, raw: str) -> str:
