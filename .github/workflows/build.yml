@@ -74,13 +74,25 @@ jobs:
 
       - name: Install debug keystore
         run: |
+          # Gradle/AGP 8.x on Linux resolves the debug keystore via
+          # $XDG_CONFIG_HOME/.android/ when XDG_CONFIG_HOME is set
+          # (GH Actions sets it to /home/runner/.config). Copy our
+          # committed keystore to ALL candidate locations so every code
+          # path sees the same key.
           mkdir -p ~/.android
-          cp android/debug.keystore ~/.android/debug.keystore
-          chmod 600 ~/.android/debug.keystore
+          mkdir -p ~/.config/.android
           mkdir -p ~/.buildozer/android/platform
+          cp android/debug.keystore ~/.android/debug.keystore
+          cp android/debug.keystore ~/.config/.android/debug.keystore
           cp android/debug.keystore ~/.buildozer/android/platform/debug.keystore
-          echo "=== Installed keystore ==="
-          keytool -list -keystore ~/.android/debug.keystore -storepass android | head -3
+          chmod 600 ~/.android/debug.keystore
+          chmod 600 ~/.config/.android/debug.keystore
+          chmod 600 ~/.buildozer/android/platform/debug.keystore
+          echo "=== Installed keystore everywhere ==="
+          for f in ~/.android/debug.keystore ~/.config/.android/debug.keystore ~/.buildozer/android/platform/debug.keystore; do
+            echo "--- $f ---"
+            keytool -list -v -keystore "$f" -storepass android 2>/dev/null | grep -iE "SHA256|Alias"
+          done
 
       - name: Bump android.numeric_version to run number
         run: |
