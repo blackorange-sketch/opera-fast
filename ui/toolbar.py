@@ -5,6 +5,7 @@ from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
 from kivy.graphics import Color, Rectangle
 
+from core.log import log
 from ui.theme import (
     BG_TOOLBAR, BG_INPUT, BG_INPUT_FOCUS,
     TEXT_PRIMARY, TEXT_MUTED, ACCENT,
@@ -76,6 +77,7 @@ class Toolbar(BoxLayout):
         # Shield / adblock button
         cp, fn = icon_shield()
         self.btn_shield = _IconButton(codepoint=cp, font_name=fn)
+        self.btn_shield.bind(on_press=lambda *_: log("[toolbar] shield on_press"))
         self.btn_shield.bind(on_release=self._cb("on_shield"))
         self.add_widget(self.btn_shield)
 
@@ -105,6 +107,7 @@ class Toolbar(BoxLayout):
 
         cp, fn = icon_menu()
         self.btn_menu = _IconButton(codepoint=cp, font_name=fn)
+        self.btn_menu.bind(on_press=lambda *_: log("[toolbar] menu on_press"))
         self.btn_menu.bind(on_release=self._cb("on_menu"))
         self.add_widget(self.btn_menu)
 

@@ -1,13 +1,15 @@
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.utils import platform
 from kivy.graphics import Color as GColor, Rectangle
 
 from webview.engine import WebViewEngine
-from core.log import clear_log, log
+from core.log import clear_log, log, read_log
 from core.tabs import TabManager, DEFAULT_URL
 from core.session import save_session, load_session
 from core import adblock
@@ -67,6 +69,28 @@ class BrowserRoot(BoxLayout):
         self.speed_dial = SpeedDial(on_open=self._navigate)
         self.content.add_widget(self.speed_dial)
 
+        # === DEBUG OVERLAY (тимчасовий) ===
+        # Показує лог на екрані замість WebView. Вимикається прапорцем.
+        self.DEBUG_OVERLAY = True
+        if self.DEBUG_OVERLAY:
+            self.debug_label = Label(
+                text="[debug overlay]",
+                size_hint=(1, None),
+                halign="left",
+                valign="top",
+                font_size="9sp",
+                color=(1, 1, 1, 1),
+                text_size=(None, None),
+            )
+            self.debug_label.bind(
+                width=lambda inst, w: setattr(inst, "text_size", (w, None))
+            )
+            self.debug_sv = ScrollView(size_hint=(1, 1))
+            self.debug_sv.add_widget(self.debug_label)
+            self.content.add_widget(self.debug_sv)
+            Clock.schedule_interval(self._refresh_debug_log, 0.5)
+        # === END DEBUG OVERLAY ===
+
         self.sidebar = None
 
         self.engine = WebViewEngine(
@@ -88,6 +112,9 @@ class BrowserRoot(BoxLayout):
             log("[main] booting engine")
             adblock.install()
             self.engine.attach(None)
+            # Debug: keep WebView hidden so overlay log is visible
+            if getattr(self, "DEBUG_OVERLAY", False):
+                self.engine.set_visible(False)
             self._sync_to_active_tab(initial=True)
         except Exception as e:
             import traceback
