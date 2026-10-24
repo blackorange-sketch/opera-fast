@@ -49,18 +49,6 @@ jobs:
           restore-keys: |
             buildozer-global-${{ runner.os }}-
 
-      # Stable debug keystore — separate cache with fixed key so it never
-      # gets invalidated when buildozer.spec changes. Without this, p4a
-      # generates a new keystore on every cache-miss build, breaking
-      # in-place APK updates (Android rejects APKs signed by a different key).
-      - name: Cache debug keystore
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.buildozer/android/platform/debug.keystore
-            ~/.android/debug.keystore
-          key: android-debug-keystore-v1
-
       - name: Cache buildozer project dir
         uses: actions/cache@v4
         with:
@@ -83,6 +71,16 @@ jobs:
           ccache --zero-stats
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
           echo "USE_CCACHE=1" >> $GITHUB_ENV
+
+      - name: Install debug keystore
+        run: |
+          mkdir -p ~/.android
+          cp android/debug.keystore ~/.android/debug.keystore
+          chmod 600 ~/.android/debug.keystore
+          mkdir -p ~/.buildozer/android/platform
+          cp android/debug.keystore ~/.buildozer/android/platform/debug.keystore
+          echo "=== Installed keystore ==="
+          keytool -list -keystore ~/.android/debug.keystore -storepass android | head -3
 
       - name: Bump android.numeric_version to run number
         run: |
