@@ -66,16 +66,17 @@ class BrowserRoot(BoxLayout):
 
         self.sidebar = None
 
-        # WebViewEngine callbacks arrive on UI thread — never touch Kivy
-        # widgets directly. Wrap in Clock.schedule_once(..., 0).
         self.engine = WebViewEngine(
             top_bar_height_px=int(dp(TOOLBAR_HEIGHT_DP)),
-            on_url_changed=self._on_url_changed_ui_thread,
-            on_title_changed=self._on_title_changed_ui_thread,
         )
+
+        # Track last-polled values to avoid churning UI every 0.5s
+        self._last_polled_url = None
+        self._last_polled_title = None
 
         if platform == "android":
             Clock.schedule_once(self._boot_engine, 0.8)
+            Clock.schedule_interval(self._poll_engine, 0.5)
 
     # ---------- boot ----------
     def _boot_engine(self, _):
@@ -88,27 +89,30 @@ class BrowserRoot(BoxLayout):
             log(f"[main] boot EXC: {e}")
             log(traceback.format_exc())
 
-    # ---------- engine callbacks (UI thread -> main thread) ----------
-    def _on_url_changed_ui_thread(self, url):
-        Clock.schedule_once(lambda dt: self._apply_url(url), 0)
+    # ---------- engine polling ----------
+    def _poll_engine(self, _dt):
+        if self.engine._wv is None:
+            return True
+        url = self.engine.get_url()
+        title = self.engine.get_title()
 
-    def _on_title_changed_ui_thread(self, title):
-        Clock.schedule_once(lambda dt: self._apply_title(title), 0)
+        if url and url != self._last_polled_url:
+            self._last_polled_url = url
+            tab = self.tabs.active
+            if tab is not None and tab.url != url:
+                self.tabs.update_tab(tab.id, url=url)
+            self.toolbar.set_url(url)
+            # If user landed on a page from about:blank, hide speed dial
+            if self.speed_dial.opacity > 0:
+                self.speed_dial.opacity = 0
+                self.speed_dial.disabled = True
 
-    def _apply_url(self, url):
-        tab = self.tabs.active
-        if tab is None:
-            return
-        # Only update if URL differs (avoid loops)
-        if tab.url != url:
-            self.tabs.update_tab(tab.id, url=url)
-        self.toolbar.set_url(url)
-
-    def _apply_title(self, title):
-        tab = self.tabs.active
-        if tab is None or not title:
-            return
-        self.tabs.update_tab(tab.id, title=title)
+        if title and title != self._last_polled_title:
+            self._last_polled_title = title
+            tab = self.tabs.active
+            if tab is not None:
+                self.tabs.update_tab(tab.id, title=title)
+        return True
 
     # ---------- state sync ----------
     def _sync_to_active_tab(self, initial=False):
@@ -135,6 +139,9 @@ class BrowserRoot(BoxLayout):
         self.engine.set_visible(True)
         if url:
             self.engine.load(url)
+        # Reset polling cache so next poll picks up fresh URL
+        self._last_polled_url = None
+        self._last_polled_title = None
 
     # ---------- navigation ----------
     def _parse_url(self, raw: str) -> str:
