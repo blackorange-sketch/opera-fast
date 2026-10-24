@@ -41,8 +41,8 @@ class WebViewEngine:
                 wv = WebView(act)
                 log("[engine] wv created")
 
-                log("[engine] step 3: bg color RED")
-                wv.setBackgroundColor(Color.RED)
+                log("[engine] step 3: bg color WHITE")
+                wv.setBackgroundColor(Color.WHITE)
 
                 log("[engine] step 4: settings")
                 s = wv.getSettings()
