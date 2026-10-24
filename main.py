@@ -1,7 +1,5 @@
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.textinput import TextInput
-from kivy.uix.button import Button
 from kivy.uix.widget import Widget
 from kivy.clock import Clock
 from kivy.metrics import dp
@@ -10,57 +8,48 @@ from kivy.graphics import Color as GColor, Rectangle
 
 from webview.engine import WebViewEngine
 from core.log import clear_log, log
-
-TOP_BAR_H = dp(52)
+from ui.theme import BG_APP
+from ui.toolbar import Toolbar
 
 
 class BrowserRoot(BoxLayout):
     def __init__(self, **kw):
         super().__init__(orientation="vertical", **kw)
-
         clear_log()
 
-        top = BoxLayout(
-            size_hint_y=None, height=TOP_BAR_H,
-            spacing=dp(4), padding=[dp(4), dp(4)],
+        # Dark background for the whole app
+        with self.canvas.before:
+            GColor(*BG_APP)
+            self._bg = Rectangle(pos=self.pos, size=self.size)
+        self.bind(
+            pos=lambda *a: setattr(self._bg, "pos", self.pos),
+            size=lambda *a: setattr(self._bg, "size", self.size),
         )
-        btn_back = Button(text="\u2190", size_hint_x=None, width=dp(40))
-        btn_back.bind(on_press=lambda *_: self.engine.go_back())
-        btn_fwd = Button(text="\u2192", size_hint_x=None, width=dp(40))
-        btn_fwd.bind(on_press=lambda *_: self.engine.go_forward())
-        btn_reload = Button(text="\u27f3", size_hint_x=None, width=dp(40))
-        btn_reload.bind(on_press=lambda *_: self.engine.reload())
 
-        self.url = TextInput(
-            text="https://duckduckgo.com", multiline=False,
-            size_hint_y=None, height=dp(40),
-        )
-        self.url.bind(on_text_validate=self._navigate)
+        self.engine = WebViewEngine(top_bar_height_px=int(dp(52)))
 
-        btn_go = Button(text="\u2192", size_hint_x=None, width=dp(40))
-        btn_go.bind(on_press=self._navigate)
+        self.toolbar = Toolbar(callbacks={
+            "on_back":    lambda *_: self.engine.go_back(),
+            "on_forward": lambda *_: self.engine.go_forward(),
+            "on_reload":  lambda *_: self.engine.reload(),
+            "on_go":      self._navigate,
+            "on_tabs":    self._on_tabs,
+            "on_menu":    self._on_menu,
+        })
+        self.add_widget(self.toolbar)
 
-        top.add_widget(btn_back)
-        top.add_widget(btn_fwd)
-        top.add_widget(btn_reload)
-        top.add_widget(self.url)
-        top.add_widget(btn_go)
-        self.add_widget(top)
-
-        # White placeholder; WebView covers it once loaded.
+        # Placeholder so screen is not black before WebView covers it
         self.placeholder = Widget()
         with self.placeholder.canvas.before:
-            GColor(1, 1, 1, 1)
-            self._rect = Rectangle(
+            GColor(*BG_APP)
+            self._ph = Rectangle(
                 pos=self.placeholder.pos, size=self.placeholder.size
             )
         self.placeholder.bind(
-            pos=lambda *a: setattr(self._rect, "pos", self.placeholder.pos),
-            size=lambda *a: setattr(self._rect, "size", self.placeholder.size),
+            pos=lambda *a: setattr(self._ph, "pos", self.placeholder.pos),
+            size=lambda *a: setattr(self._ph, "size", self.placeholder.size),
         )
         self.add_widget(self.placeholder)
-
-        self.engine = WebViewEngine(top_bar_height_px=int(TOP_BAR_H))
 
         if platform == "android":
             Clock.schedule_once(self._boot_engine, 0.8)
@@ -70,13 +59,20 @@ class BrowserRoot(BoxLayout):
             log("[main] booting engine")
             self.engine.attach(None)
             self.engine.load("https://duckduckgo.com")
+            self.toolbar.set_url("https://duckduckgo.com")
         except Exception as e:
             import traceback
             log(f"[main] boot EXC: {e}")
             log(traceback.format_exc())
 
-    def _navigate(self, *_):
-        raw = self.url.text.strip()
+    def _on_tabs(self, *_):
+        log("[main] tabs button pressed (not wired yet)")
+
+    def _on_menu(self, *_):
+        log("[main] menu button pressed (not wired yet)")
+
+    def _navigate(self, raw):
+        raw = (raw or "").strip()
         if not raw:
             return
         if raw.startswith(("http://", "https://")):
@@ -86,6 +82,7 @@ class BrowserRoot(BoxLayout):
         else:
             url = "https://duckduckgo.com/?q=" + raw.replace(" ", "+")
         self.engine.load(url)
+        self.toolbar.set_url(url)
 
 
 class OperaFastApp(App):
