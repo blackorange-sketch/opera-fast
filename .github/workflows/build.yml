@@ -92,9 +92,31 @@ jobs:
           echo "JAVA_HOME=$JAVA_HOME"
           java -version
 
+      - name: Diagnose keystore (before build)
+        run: |
+          echo "=== All debug.keystore files before build ==="
+          find ~ -name "debug.keystore" -type f 2>/dev/null | while read f; do
+            echo "--- $f ---"
+            ls -la "$f"
+            keytool -list -v -keystore "$f" -storepass android 2>/dev/null | grep -iE "SHA256|Alias"
+          done
+          echo ""
+          echo "=== p4a source: where does it look for keystore? ==="
+          grep -rn "debug.keystore" ~/.buildozer/android/platform/python-for-android/ 2>/dev/null | head -10 || echo "(p4a not downloaded yet)"
+
       - name: Build debug APK
         run: |
           buildozer -v android debug
+
+      - name: Diagnose keystore (after build)
+        if: always()
+        run: |
+          echo "=== All debug.keystore files after build ==="
+          find ~ -name "debug.keystore" -type f 2>/dev/null | while read f; do
+            echo "--- $f ---"
+            ls -la "$f"
+            keytool -list -v -keystore "$f" -storepass android 2>/dev/null | grep -iE "SHA256|Alias"
+          done
 
       - name: Show ccache stats
         if: always()
