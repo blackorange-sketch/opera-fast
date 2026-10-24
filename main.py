@@ -2,12 +2,15 @@ from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
-from kivy.uix.widget import Widget
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.utils import platform
+from kivy.graphics import Color as GColor, Rectangle
 
 from webview.engine import WebViewEngine
+from core.log import read_log, clear_log, log
 
 TOP_BAR_H = dp(52)
 
@@ -15,6 +18,9 @@ TOP_BAR_H = dp(52)
 class BrowserRoot(BoxLayout):
     def __init__(self, **kw):
         super().__init__(orientation="vertical", **kw)
+
+        # Clear log at each startup so we see only this session's messages
+        clear_log()
 
         top = BoxLayout(
             size_hint_y=None,
@@ -48,29 +54,57 @@ class BrowserRoot(BoxLayout):
         top.add_widget(btn_go)
         self.add_widget(top)
 
-        # Placeholder below the toolbar — Kivy draws here, but WebView (added
-        # via Activity) should render on top. Kept minimal so if WebView is
-        # not visible, we see white, not black.
-        from kivy.graphics import Color, Rectangle
-        self.placeholder = Widget()
+        # Placeholder area — shows live log so we can diagnose without ADB.
+        self.placeholder = BoxLayout()
         with self.placeholder.canvas.before:
-            Color(1, 1, 1, 1)  # white
-            self._rect = Rectangle(pos=self.placeholder.pos, size=self.placeholder.size)
+            GColor(1, 1, 1, 1)  # white bg
+            self._rect = Rectangle(
+                pos=self.placeholder.pos, size=self.placeholder.size
+            )
         self.placeholder.bind(
             pos=lambda *a: setattr(self._rect, "pos", self.placeholder.pos),
             size=lambda *a: setattr(self._rect, "size", self.placeholder.size),
         )
+
+        self.log_label = Label(
+            text="[boot]",
+            size_hint=(1, None),
+            halign="left",
+            valign="top",
+            font_size="10sp",
+            color=(0, 0, 0, 1),
+            text_size=(None, None),
+        )
+        self.log_label.bind(
+            width=lambda *a: setattr(
+                self.log_label, "text_size", (self.log_label.width, None)
+            )
+        )
+
+        sv = ScrollView(size_hint=(1, 1))
+        sv.add_widget(self.log_label)
+        self.placeholder.add_widget(sv)
         self.add_widget(self.placeholder)
 
         self.engine = WebViewEngine(top_bar_height_px=int(TOP_BAR_H))
 
         if platform == "android":
             Clock.schedule_once(self._boot_engine, 0.8)
+            Clock.schedule_interval(self._refresh_log, 1.5)
 
     def _boot_engine(self, _):
-        print("[main] booting engine")
+        log("[main] booting engine")
         self.engine.attach(None)
         self.engine.load("https://duckduckgo.com")
+
+    def _refresh_log(self, _dt):
+        try:
+            text = read_log(120)
+            if text != self.log_label.text:
+                self.log_label.text = text
+        except Exception as e:
+            self.log_label.text = f"(log read error: {e})"
+        return True
 
     def _navigate(self, *_):
         raw = self.url.text.strip()
