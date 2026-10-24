@@ -48,7 +48,7 @@ class BrowserRoot(BoxLayout):
             "on_go":      self._navigate,
             "on_tabs":    self._show_sidebar,
             "on_shield":  self._on_shield_tap,
-            "on_menu":    lambda *_: log("[main] menu (todo)"),
+            "on_menu":    self._on_menu_tap,
         })
         self.add_widget(self.toolbar)
 
@@ -168,20 +168,35 @@ class BrowserRoot(BoxLayout):
         return "https://duckduckgo.com/?q=" + raw.replace(" ", "+")
 
     def _on_shield_tap(self, *_):
-        blocked, total = adblock.get_stats()
-        enabled = adblock.is_enabled()
-        page_url = self.engine.get_url() or ""
-        page_host = adblock.host_of(page_url)
-        log(f"[main] shield tapped: blocked={blocked} total={total} "
-            f"enabled={enabled} host={page_host}")
-        show_adblock_dialog(
-            blocked=blocked,
-            total_rules=total,
-            enabled=enabled,
-            page_host=page_host,
-            on_toggle_enabled=self._toggle_adblock,
-            on_whitelist=self._whitelist_current,
-        )
+        try:
+            blocked, total = adblock.get_stats()
+            enabled = adblock.is_enabled()
+            page_url = self.engine.get_url() or ""
+            page_host = adblock.host_of(page_url)
+            log(f"[main] shield tapped: blocked={blocked} total={total} "
+                f"enabled={enabled} host={page_host}")
+            show_adblock_dialog(
+                blocked=blocked,
+                total_rules=total,
+                enabled=enabled,
+                page_host=page_host,
+                on_toggle_enabled=self._toggle_adblock,
+                on_whitelist=self._whitelist_current,
+            )
+        except Exception as e:
+            import traceback
+            log(f"[main] shield tap EXC: {e}")
+            log(traceback.format_exc())
+
+    def _on_menu_tap(self, *_):
+        log("[main] menu tapped — sharing log")
+        try:
+            from core.share import share_log
+            share_log()
+        except Exception as e:
+            import traceback
+            log(f"[main] share EXC: {e}")
+            log(traceback.format_exc())
 
     def _toggle_adblock(self):
         new_state = not adblock.is_enabled()

@@ -9,6 +9,7 @@ so pyjnius's dynamic proxy handles it correctly (unlike
 WebViewClient which is an abstract class).
 """
 from kivy.utils import platform
+from core.log import log
 
 
 def _make_listener(callback):
@@ -28,7 +29,7 @@ def _make_listener(callback):
             try:
                 self.cb(int(which))
             except Exception as e:
-                print(f"[dialog] onClick error: {e}")
+                log(f"[dialog] onClick error: {e}")
 
     return _Listener(callback)
 
@@ -37,7 +38,7 @@ def show_adblock_dialog(blocked, total_rules, enabled, page_host,
                         on_toggle_enabled, on_whitelist):
     """Show native AlertDialog with ad-blocker stats + actions."""
     if platform != "android":
-        print(f"[dialog] adblock: blocked={blocked} total={total_rules} enabled={enabled}")
+        log(f"[dialog] adblock: blocked={blocked} total={total_rules} enabled={enabled}")
         return
 
     from jnius import autoclass
@@ -87,7 +88,7 @@ def show_adblock_dialog(blocked, total_rules, enabled, page_host,
 
         except Exception as e:
             import traceback
-            print(f"[dialog] show failed: {e}")
-            traceback.print_exc()
+            log(f"[dialog] show failed: {e}")
+            log(traceback.format_exc())
 
     _show()
