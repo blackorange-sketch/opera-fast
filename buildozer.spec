@@ -5,6 +5,7 @@ package.domain = org.blackorange
 source.dir = .
 source.include_exts = py,kv,png,jpg,json,html,css,js,gz,ttf,txt
 version = 0.1.0
+android.numeric_version = 1
 
 blacklist_requirements = libthorvg
 requirements = python3==3.10.11,hostpython3==3.10.11,kivy==2.2.1,pyjnius,android

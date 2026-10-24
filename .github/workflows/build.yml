@@ -41,7 +41,6 @@ jobs:
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==0.29.36
 
-      # Кеш 1: глобальні інструменти (SDK, NDK, platform-tools)
       - name: Cache buildozer global dir
         uses: actions/cache@v4
         with:
@@ -50,7 +49,18 @@ jobs:
           restore-keys: |
             buildozer-global-${{ runner.os }}-
 
-      # Кеш 2: локальні артефакти проєкту (рецепти, dists, obj)
+      # Stable debug keystore — separate cache with fixed key so it never
+      # gets invalidated when buildozer.spec changes. Without this, p4a
+      # generates a new keystore on every cache-miss build, breaking
+      # in-place APK updates (Android rejects APKs signed by a different key).
+      - name: Cache debug keystore
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer/android/platform/debug.keystore
+            ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
       - name: Cache buildozer project dir
         uses: actions/cache@v4
         with:
@@ -59,7 +69,6 @@ jobs:
           restore-keys: |
             buildozer-project-${{ runner.os }}-
 
-      # Кеш 3: ccache для C/C++ об'єктних файлів
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -75,6 +84,11 @@ jobs:
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
           echo "USE_CCACHE=1" >> $GITHUB_ENV
 
+      - name: Bump android.numeric_version to run number
+        run: |
+          sed -i "s/^android\.numeric_version.*/android.numeric_version = ${{ github.run_number }}/" buildozer.spec
+          grep -n "android.numeric_version" buildozer.spec
+
       - name: Verify Java version
         run: |
           echo "JAVA_HOME=$JAVA_HOME"
@@ -87,6 +101,18 @@ jobs:
       - name: Show ccache stats
         if: always()
         run: ccache --show-stats
+
+      - name: Show APK signature
+        if: always()
+        run: |
+          APK=$(ls bin/*.apk 2>/dev/null | head -1)
+          if [ -n "$APK" ]; then
+            echo "APK: $APK"
+            APKSIGNER=$(find ~/.buildozer/android/platform/android-sdk/build-tools -name apksigner 2>/dev/null | head -1)
+            if [ -n "$APKSIGNER" ]; then
+              "$APKSIGNER" verify --print-certs "$APK" || true
+            fi
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
