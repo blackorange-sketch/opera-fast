@@ -1,4 +1,4 @@
-"""OperaFast top toolbar (Opera-style dark theme)."""
+"""OperaFast top toolbar (Opera-style dark theme, Material Icons)."""
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -10,29 +10,32 @@ from ui.theme import (
     TEXT_PRIMARY, TEXT_MUTED, ACCENT,
     TOOLBAR_HEIGHT_DP, ICON_BUTTON_WIDTH_DP, URL_INPUT_HEIGHT_DP,
 )
+from ui.icons import (
+    icon_back, icon_forward, icon_reload, icon_tabs, icon_menu,
+    ICONS_AVAILABLE,
+)
 
 
 class _IconButton(Button):
-    """Flat transparent button that behaves like a browser icon."""
+    """Flat transparent button that renders a Material Icons glyph."""
 
-    def __init__(self, text="", **kw):
+    def __init__(self, codepoint="", font_name=None, **kw):
         super().__init__(**kw)
-        self.text = text
+        self.text = codepoint
+        if font_name:
+            self.font_name = font_name
         self.background_normal = ""
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)
         self.color = TEXT_PRIMARY
-        self.font_size = "20sp"
+        # Material Icons look best at 24sp; ASCII fallback is smaller.
+        self.font_size = "24sp" if ICONS_AVAILABLE else "18sp"
         self.size_hint_x = None
         self.width = dp(ICON_BUTTON_WIDTH_DP)
 
 
 class Toolbar(BoxLayout):
-    """Top toolbar with back/forward/reload/url/tabs/menu.
-
-    callbacks: dict with optional keys
-        'on_back', 'on_forward', 'on_reload', 'on_go'(url), 'on_tabs', 'on_menu'
-    """
+    """Top toolbar with back/forward/reload/url/tabs/menu."""
 
     def __init__(self, callbacks=None, **kw):
         super().__init__(
@@ -60,15 +63,18 @@ class Toolbar(BoxLayout):
         return self.callbacks.get(name, default or (lambda *_: None))
 
     def _build(self):
-        self.btn_back = _IconButton(text="\u2190")
+        cp, fn = icon_back()
+        self.btn_back = _IconButton(codepoint=cp, font_name=fn)
         self.btn_back.bind(on_release=self._cb("on_back"))
         self.add_widget(self.btn_back)
 
-        self.btn_forward = _IconButton(text="\u2192")
+        cp, fn = icon_forward()
+        self.btn_forward = _IconButton(codepoint=cp, font_name=fn)
         self.btn_forward.bind(on_release=self._cb("on_forward"))
         self.add_widget(self.btn_forward)
 
-        self.btn_reload = _IconButton(text="\u27f3")
+        cp, fn = icon_reload()
+        self.btn_reload = _IconButton(codepoint=cp, font_name=fn)
         self.btn_reload.bind(on_release=self._cb("on_reload"))
         self.add_widget(self.btn_reload)
 
@@ -91,11 +97,13 @@ class Toolbar(BoxLayout):
         self.url_input.bind(focus=self._on_focus_change)
         self.add_widget(self.url_input)
 
-        self.btn_tabs = _IconButton(text="\u29c9")  # ⧉
+        cp, fn = icon_tabs()
+        self.btn_tabs = _IconButton(codepoint=cp, font_name=fn)
         self.btn_tabs.bind(on_release=self._cb("on_tabs"))
         self.add_widget(self.btn_tabs)
 
-        self.btn_menu = _IconButton(text="\u22ee")  # ⋮
+        cp, fn = icon_menu()
+        self.btn_menu = _IconButton(codepoint=cp, font_name=fn)
         self.btn_menu.bind(on_release=self._cb("on_menu"))
         self.add_widget(self.btn_menu)
 
@@ -108,10 +116,10 @@ class Toolbar(BoxLayout):
         self.url_input.background_color = BG_INPUT_FOCUS if focused else BG_INPUT
 
     def set_url(self, url: str) -> None:
-        """Update URL text unless user is actively typing."""
         if not self.url_input.focus:
             self.url_input.text = url or ""
 
     def set_tab_count(self, n: int) -> None:
-        """Display tab count on the tabs icon (Opera style: number in brackets)."""
-        self.btn_tabs.text = f"\u29c9 {n}" if n > 1 else "\u29c9"
+        # Tab count indicator will be added in Phase 1.3 as a badge,
+        # not by overwriting the icon (Material Icons has no "2" glyph).
+        pass
