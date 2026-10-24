@@ -2,7 +2,7 @@ from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
-from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.widget import Widget
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.utils import platform
@@ -25,10 +25,8 @@ class BrowserRoot(BoxLayout):
 
         btn_back = Button(text="\u2190", size_hint_x=None, width=dp(40))
         btn_back.bind(on_press=lambda *_: self.engine.go_back())
-
         btn_fwd = Button(text="\u2192", size_hint_x=None, width=dp(40))
         btn_fwd.bind(on_press=lambda *_: self.engine.go_forward())
-
         btn_reload = Button(text="\u27f3", size_hint_x=None, width=dp(40))
         btn_reload.bind(on_press=lambda *_: self.engine.reload())
 
@@ -50,8 +48,19 @@ class BrowserRoot(BoxLayout):
         top.add_widget(btn_go)
         self.add_widget(top)
 
-        self.web_slot = FloatLayout()
-        self.add_widget(self.web_slot)
+        # Placeholder below the toolbar — Kivy draws here, but WebView (added
+        # via Activity) should render on top. Kept minimal so if WebView is
+        # not visible, we see white, not black.
+        from kivy.graphics import Color, Rectangle
+        self.placeholder = Widget()
+        with self.placeholder.canvas.before:
+            Color(1, 1, 1, 1)  # white
+            self._rect = Rectangle(pos=self.placeholder.pos, size=self.placeholder.size)
+        self.placeholder.bind(
+            pos=lambda *a: setattr(self._rect, "pos", self.placeholder.pos),
+            size=lambda *a: setattr(self._rect, "size", self.placeholder.size),
+        )
+        self.add_widget(self.placeholder)
 
         self.engine = WebViewEngine(top_bar_height_px=int(TOP_BAR_H))
 
@@ -59,7 +68,8 @@ class BrowserRoot(BoxLayout):
             Clock.schedule_once(self._boot_engine, 0.8)
 
     def _boot_engine(self, _):
-        self.engine.attach(self.web_slot)
+        print("[main] booting engine")
+        self.engine.attach(None)
         self.engine.load("https://duckduckgo.com")
 
     def _navigate(self, *_):

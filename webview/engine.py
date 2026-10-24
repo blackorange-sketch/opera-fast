@@ -1,13 +1,29 @@
-"""Android WebView wrapper for OperaFast.
-
-Design:
-- All WebView work happens on UI thread via run_on_ui_thread.
-- load() before WebView exists is queued in _pending_url and drained
-  right after creation.
-- White background so empty WebView is white, not black.
-- Plain WebViewClient() keeps navigation inside the app.
-"""
+"""Android WebView wrapper for OperaFast (diagnostic version)."""
+import os
+import traceback
 from kivy.utils import platform
+
+
+def _log_path():
+    try:
+        from android.storage import app_storage_path
+        d = app_storage_path()
+    except Exception:
+        d = os.path.expanduser("~/.operafast")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+    return os.path.join(d, "operafast.log")
+
+
+def _log(msg):
+    print(msg)
+    try:
+        with open(_log_path(), "a", encoding="utf-8") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
 
 
 class WebViewEngine:
@@ -16,10 +32,9 @@ class WebViewEngine:
         self._top_bar_height_px = int(top_bar_height_px)
         self._pending_url = None
 
-    # ---------- creation ----------
     def attach(self, kivy_slot):
         if platform != "android":
-            print("[engine] non-android: mock mode")
+            _log("[engine] non-android: mock mode")
             return
 
         from jnius import autoclass
@@ -29,8 +44,10 @@ class WebViewEngine:
         WebViewClient = autoclass("android.webkit.WebViewClient")
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         ViewGroup = autoclass("android.view.ViewGroup")
-        MarginLayoutParams = autoclass("android.view.ViewGroup$MarginLayoutParams")
+        FrameLayout = autoclass("android.widget.FrameLayout")
+        FLParams = autoclass("android.widget.FrameLayout$LayoutParams")
         Color = autoclass("android.graphics.Color")
+        Gravity = autoclass("android.view.Gravity")
 
         engine_ref = self
 
@@ -38,16 +55,14 @@ class WebViewEngine:
         def _create():
             try:
                 act = PythonActivity.mActivity
-                print(f"[engine] activity = {act}")
+                _log(f"[engine] activity = {act}")
                 if act is None:
-                    print("[engine] FATAL: mActivity is None")
+                    _log("[engine] FATAL: mActivity is None")
                     return
 
                 wv = WebView(act)
-                try:
-                    wv.setBackgroundColor(Color.WHITE)
-                except Exception as e:
-                    print(f"[engine] setBackgroundColor failed: {e}")
+                # DIAGNOSTIC: red background so we can see if WebView is visible
+                wv.setBackgroundColor(Color.RED)
 
                 s = wv.getSettings()
                 s.setJavaScriptEnabled(True)
@@ -60,46 +75,65 @@ class WebViewEngine:
                 s.setLoadWithOverviewMode(True)
                 s.setUseWideViewPort(True)
 
-                # Plain client keeps navigation inside the WebView
-                # and avoids the pyjnius Java-subclass crash.
                 wv.setWebViewClient(WebViewClient())
 
-                params = MarginLayoutParams(
+                params = FLParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
+                    Gravity.TOP,
                 )
                 params.topMargin = engine_ref._top_bar_height_px
 
-                act.addContentView(wv, params)
+                # Find the content view (FrameLayout) and add WebView there
+                res_id = act.getResources().getIdentifier(
+                    "content", "id", "android"
+                )
+                _log(f"[engine] android.R.id.content = {res_id}")
+                content = act.findViewById(res_id)
+                _log(f"[engine] content view = {content}")
+
+                if content is not None:
+                    content.addView(wv, params)
+                    _log("[engine] added to content view")
+                else:
+                    act.addContentView(wv, params)
+                    _log("[engine] added via addContentView (fallback)")
+
+                wv.bringToFront()
                 engine_ref._wv = wv
-                print("[engine] WebView attached")
+                _log("[engine] WebView attached")
+
+                # Report visibility & size for diagnosis
+                _log(
+                    f"[engine] wv vis={wv.getVisibility()} "
+                    f"size={wv.getWidth()}x{wv.getHeight()} "
+                    f"top={wv.getTop()}"
+                )
 
                 if engine_ref._pending_url:
                     url = engine_ref._pending_url
                     engine_ref._pending_url = None
-                    print(f"[engine] loading queued URL: {url}")
+                    _log(f"[engine] loading queued URL: {url}")
                     wv.loadUrl(url)
                 else:
-                    print("[engine] loading about:blank")
+                    _log("[engine] loading about:blank")
                     wv.loadUrl("about:blank")
             except Exception as e:
-                import traceback
-                traceback.print_exc()
-                print(f"[engine] create failed: {e}")
+                _log(f"[engine] create failed: {e}")
+                _log(traceback.format_exc())
 
         _create()
 
-    # ---------- helpers ----------
     def _ui(self, fn):
         from android.runnable import run_on_ui_thread
         run_on_ui_thread(fn)()
 
-    # ---------- navigation ----------
     def load(self, url):
         if self._wv is None:
-            print(f"[engine] queueing URL (wv not ready): {url}")
+            _log(f"[engine] queueing URL (wv not ready): {url}")
             self._pending_url = url
             return
+        _log(f"[engine] load({url})")
         self._ui(lambda: self._wv.loadUrl(url))
 
     def reload(self):
