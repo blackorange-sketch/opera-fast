@@ -1,19 +1,16 @@
 """Android WebView wrapper for OperaFast.
 
-Key design points:
-- All WebView work happens on the UI thread via run_on_ui_thread.
-- WebView creation is async (queued to UI thread), so load() before
-  the view exists is queued in _pending_url and drained right after
-  creation finishes.
-- White background so an empty WebView is visibly white, not black.
-- WebViewClient logs page lifecycle so failures are visible in logcat.
+Design:
+- All WebView work happens on UI thread via run_on_ui_thread.
+- load() before WebView exists is queued in _pending_url and drained
+  right after creation.
+- White background so empty WebView is white, not black.
+- Plain WebViewClient() keeps navigation inside the app.
 """
 from kivy.utils import platform
 
 
 class WebViewEngine:
-    """Thin wrapper over Android WebView via pyjnius."""
-
     def __init__(self, top_bar_height_px=0):
         self._wv = None
         self._top_bar_height_px = int(top_bar_height_px)
@@ -29,24 +26,13 @@ class WebViewEngine:
         from android.runnable import run_on_ui_thread
 
         WebView = autoclass("android.webkit.WebView")
-        WebViewClientBase = autoclass("android.webkit.WebViewClient")
+        WebViewClient = autoclass("android.webkit.WebViewClient")
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         ViewGroup = autoclass("android.view.ViewGroup")
         MarginLayoutParams = autoclass("android.view.ViewGroup$MarginLayoutParams")
         Color = autoclass("android.graphics.Color")
 
         engine_ref = self
-
-        # Custom WebViewClient for logging (subclassing a Java class in pyjnius)
-        class _Client(WebViewClientBase):
-            def onPageStarted(self, view, url, favicon):
-                print(f"[webview] page started: {url}")
-
-            def onPageFinished(self, view, url):
-                print(f"[webview] page finished: {url}")
-
-            def onReceivedError(self, view, errorCode, description, failingUrl):
-                print(f"[webview] error {errorCode}: {description} @ {failingUrl}")
 
         @run_on_ui_thread
         def _create():
@@ -58,7 +44,10 @@ class WebViewEngine:
                     return
 
                 wv = WebView(act)
-                wv.setBackgroundColor(Color.WHITE)
+                try:
+                    wv.setBackgroundColor(Color.WHITE)
+                except Exception as e:
+                    print(f"[engine] setBackgroundColor failed: {e}")
 
                 s = wv.getSettings()
                 s.setJavaScriptEnabled(True)
@@ -71,7 +60,9 @@ class WebViewEngine:
                 s.setLoadWithOverviewMode(True)
                 s.setUseWideViewPort(True)
 
-                wv.setWebViewClient(_Client())
+                # Plain client keeps navigation inside the WebView
+                # and avoids the pyjnius Java-subclass crash.
+                wv.setWebViewClient(WebViewClient())
 
                 params = MarginLayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -83,7 +74,6 @@ class WebViewEngine:
                 engine_ref._wv = wv
                 print("[engine] WebView attached")
 
-                # Drain pending URL or show about:blank
                 if engine_ref._pending_url:
                     url = engine_ref._pending_url
                     engine_ref._pending_url = None
@@ -104,7 +94,7 @@ class WebViewEngine:
         from android.runnable import run_on_ui_thread
         run_on_ui_thread(fn)()
 
-    # ---------- navigation API ----------
+    # ---------- navigation ----------
     def load(self, url):
         if self._wv is None:
             print(f"[engine] queueing URL (wv not ready): {url}")
