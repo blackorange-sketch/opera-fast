@@ -1,7 +1,6 @@
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.widget import Widget
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.utils import platform
@@ -26,7 +25,6 @@ class BrowserRoot(BoxLayout):
         super().__init__(orientation="vertical", **kw)
         clear_log()
 
-        # Dark background
         with self.canvas.before:
             GColor(*BG_APP)
             self._bg = Rectangle(pos=self.pos, size=self.size)
@@ -35,14 +33,12 @@ class BrowserRoot(BoxLayout):
             size=lambda *a: setattr(self._bg, "size", self.size),
         )
 
-        # Tabs (restore session if available)
         self.tabs = TabManager()
         if load_session(self.tabs):
             log("[main] session restored")
         else:
             log("[main] new session")
 
-        # Toolbar
         self.toolbar = Toolbar(callbacks={
             "on_back":    lambda *_: self.engine.go_back(),
             "on_forward": lambda *_: self.engine.go_forward(),
@@ -53,7 +49,6 @@ class BrowserRoot(BoxLayout):
         })
         self.add_widget(self.toolbar)
 
-        # Content area (FloatLayout so speed dial / sidebar can overlap)
         self.content = FloatLayout()
         with self.content.canvas.before:
             GColor(*BG_APP)
@@ -66,15 +61,18 @@ class BrowserRoot(BoxLayout):
         )
         self.add_widget(self.content)
 
-        # Speed dial (visible when active tab is blank)
         self.speed_dial = SpeedDial(on_open=self._navigate)
         self.content.add_widget(self.speed_dial)
 
-        # Sidebar (created on demand)
         self.sidebar = None
 
-        # Engine
-        self.engine = WebViewEngine(top_bar_height_px=int(dp(TOOLBAR_HEIGHT_DP)))
+        # WebViewEngine callbacks arrive on UI thread — never touch Kivy
+        # widgets directly. Wrap in Clock.schedule_once(..., 0).
+        self.engine = WebViewEngine(
+            top_bar_height_px=int(dp(TOOLBAR_HEIGHT_DP)),
+            on_url_changed=self._on_url_changed_ui_thread,
+            on_title_changed=self._on_title_changed_ui_thread,
+        )
 
         if platform == "android":
             Clock.schedule_once(self._boot_engine, 0.8)
@@ -90,11 +88,32 @@ class BrowserRoot(BoxLayout):
             log(f"[main] boot EXC: {e}")
             log(traceback.format_exc())
 
+    # ---------- engine callbacks (UI thread -> main thread) ----------
+    def _on_url_changed_ui_thread(self, url):
+        Clock.schedule_once(lambda dt: self._apply_url(url), 0)
+
+    def _on_title_changed_ui_thread(self, title):
+        Clock.schedule_once(lambda dt: self._apply_title(title), 0)
+
+    def _apply_url(self, url):
+        tab = self.tabs.active
+        if tab is None:
+            return
+        # Only update if URL differs (avoid loops)
+        if tab.url != url:
+            self.tabs.update_tab(tab.id, url=url)
+        self.toolbar.set_url(url)
+
+    def _apply_title(self, title):
+        tab = self.tabs.active
+        if tab is None or not title:
+            return
+        self.tabs.update_tab(tab.id, title=title)
+
     # ---------- state sync ----------
     def _sync_to_active_tab(self, initial=False):
         tab = self.tabs.active
         if tab is None:
-            # shouldn't happen — TabManager always has >=1 tab
             self.tabs.add_tab(activate=True)
             tab = self.tabs.active
 
@@ -184,7 +203,6 @@ class BrowserRoot(BoxLayout):
         self.tabs.close_tab(tab_id)
         if self.tabs.count() == 0:
             self.tabs.add_tab(activate=True)
-        # Refresh sidebar (re-create with updated list) if still open
         if self.sidebar is not None:
             self.content.remove_widget(self.sidebar)
             self.sidebar = None

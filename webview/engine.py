@@ -6,11 +6,16 @@ from core.log import log
 
 
 class WebViewEngine:
-    def __init__(self, top_bar_height_px=0):
+    def __init__(self, top_bar_height_px=0, on_url_changed=None,
+                 on_title_changed=None):
         self._wv = None
         self._top_bar_height_px = int(top_bar_height_px)
         self._pending_url = None
         self._pending_visible = True
+        # Keep strong references to pyjnius clients (otherwise GC kills them)
+        self._client = None
+        self._on_url_changed = on_url_changed
+        self._on_title_changed = on_title_changed
 
     def attach(self, kivy_slot):
         if platform != "android":
@@ -19,9 +24,9 @@ class WebViewEngine:
 
         from jnius import autoclass
         from android.runnable import run_on_ui_thread
+        from webview.client import PyWebViewClient
 
         WebView = autoclass("android.webkit.WebView")
-        WebViewClient = autoclass("android.webkit.WebViewClient")
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         LayoutParams = autoclass("android.view.ViewGroup$LayoutParams")
         MarginLayoutParams = autoclass("android.view.ViewGroup$MarginLayoutParams")
@@ -29,6 +34,25 @@ class WebViewEngine:
         View = autoclass("android.view.View")
 
         engine_ref = self
+
+        # Callbacks invoked from Java (UI thread). They must not touch
+        # Kivy widgets directly; main.py wraps them in Clock.schedule_once.
+        def _on_started(url):
+            log(f"[webview] started: {url}")
+            if engine_ref._on_url_changed:
+                engine_ref._on_url_changed(url)
+
+        def _on_finished(url, title):
+            log(f"[webview] finished: {url} title={title}")
+            if engine_ref._on_url_changed:
+                engine_ref._on_url_changed(url)
+            if title and engine_ref._on_title_changed:
+                engine_ref._on_title_changed(title)
+
+        def _on_title(title):
+            log(f"[webview] title: {title}")
+            if engine_ref._on_title_changed:
+                engine_ref._on_title_changed(title)
 
         @run_on_ui_thread
         def _create():
@@ -53,7 +77,14 @@ class WebViewEngine:
                 s.setLoadWithOverviewMode(True)
                 s.setUseWideViewPort(True)
 
-                wv.setWebViewClient(WebViewClient())
+                # Install our Python client (keep reference on self!)
+                engine_ref._client = PyWebViewClient(
+                    on_started=_on_started,
+                    on_finished=_on_finished,
+                    on_title=_on_title,
+                )
+                wv.setWebViewClient(engine_ref._client)
+                log("[engine] client installed")
 
                 params = MarginLayoutParams(
                     LayoutParams.MATCH_PARENT,
@@ -88,8 +119,6 @@ class WebViewEngine:
         run_on_ui_thread(fn)()
 
     def set_visible(self, visible: bool):
-        """Show/hide WebView. Hidden state lets Kivy widgets (speed dial,
-        sidebar) become visible because native WebView otherwise covers them."""
         self._pending_visible = visible
         if self._wv is None:
             log(f"[engine] set_visible({visible}) — queued")
