@@ -46,6 +46,7 @@ class BrowserRoot(BoxLayout):
             "on_reload":  lambda *_: self.engine.reload(),
             "on_go":      self._navigate,
             "on_tabs":    self._show_sidebar,
+            "on_shield":  self._on_shield_tap,
             "on_menu":    lambda *_: log("[main] menu (todo)"),
         })
         self.add_widget(self.toolbar)
@@ -116,10 +117,11 @@ class BrowserRoot(BoxLayout):
             if tab is not None:
                 self.tabs.update_tab(tab.id, title=title)
 
-        # Adblock stats: log when counter increases (throttled by 1 log/5s)
+        # Adblock stats: update shield badge + log on change
         blocked, total = adblock.get_stats()
-        if blocked > self._last_blocked_count:
+        if blocked != self._last_blocked_count:
             self._last_blocked_count = blocked
+            self.toolbar.set_blocked_count(blocked)
             log(f"[adblock] blocked total: {blocked}/{total} rules")
         return True
 

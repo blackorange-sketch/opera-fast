@@ -8,6 +8,7 @@ from kivy.uix.widget import Widget
 from kivy.graphics import Color, Rectangle
 from kivy.metrics import dp
 
+from ui.icons import FONT_NAME
 from ui.theme import (
     BG_TOOLBAR, BG_INPUT, TEXT_PRIMARY, TEXT_MUTED, ACCENT,
 )
@@ -148,12 +149,13 @@ class Sidebar(FloatLayout):
 
         btn_x = Button(
             text="\ue5cd",
+            font_name=FONT_NAME,
             size_hint_x=None,
             width=dp(48),
             background_normal="",
             background_color=(0, 0, 0, 0),
             color=TEXT_MUTED,
-            font_size="16sp",
+            font_size="20sp",
         )
         btn_x.bind(
             on_release=lambda *_: self.callbacks["on_close_tab"](tab.id)

@@ -11,7 +11,7 @@ from ui.theme import (
     TOOLBAR_HEIGHT_DP, ICON_BUTTON_WIDTH_DP, URL_INPUT_HEIGHT_DP,
 )
 from ui.icons import (
-    icon_back, icon_forward, icon_reload, icon_tabs, icon_menu,
+    icon_back, icon_forward, icon_reload, icon_tabs, icon_menu, icon_shield,
     ICONS_AVAILABLE,
 )
 
@@ -73,6 +73,12 @@ class Toolbar(BoxLayout):
         self.btn_reload.bind(on_release=self._cb("on_reload"))
         self.add_widget(self.btn_reload)
 
+        # Shield / adblock button
+        cp, fn = icon_shield()
+        self.btn_shield = _IconButton(codepoint=cp, font_name=fn)
+        self.btn_shield.bind(on_release=self._cb("on_shield"))
+        self.add_widget(self.btn_shield)
+
         self.url_input = TextInput(
             text="",
             hint_text="Search or enter address",
@@ -126,3 +132,15 @@ class Toolbar(BoxLayout):
 
     def set_tab_count(self, n: int) -> None:
         pass
+
+    def set_blocked_count(self, n: int) -> None:
+        """Display blocked count on the shield button."""
+        cp, fn = icon_shield()
+        if fn:
+            self.btn_shield.text = cp
+            self.btn_shield.font_name = fn
+        # Color hint: green if any blocking happened, muted otherwise
+        if n > 0:
+            self.btn_shield.color = (0.4, 1.0, 0.4, 1)  # light green
+        else:
+            self.btn_shield.color = TEXT_PRIMARY
