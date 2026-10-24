@@ -15,6 +15,7 @@ from ui.theme import BG_APP, TOOLBAR_HEIGHT_DP
 from ui.toolbar import Toolbar
 from ui.speed_dial import SpeedDial
 from ui.sidebar import Sidebar
+from ui.dialogs import show_adblock_dialog
 
 
 def _is_blank(url: str) -> bool:
@@ -168,8 +169,33 @@ class BrowserRoot(BoxLayout):
 
     def _on_shield_tap(self, *_):
         blocked, total = adblock.get_stats()
-        log(f"[main] shield tapped: blocked={blocked} total_rules={total}")
-        # TODO Phase 2.2: native AlertDialog with stats + toggle + whitelist
+        enabled = adblock.is_enabled()
+        page_url = self.engine.get_url() or ""
+        page_host = adblock.host_of(page_url)
+        log(f"[main] shield tapped: blocked={blocked} total={total} "
+            f"enabled={enabled} host={page_host}")
+        show_adblock_dialog(
+            blocked=blocked,
+            total_rules=total,
+            enabled=enabled,
+            page_host=page_host,
+            on_toggle_enabled=self._toggle_adblock,
+            on_whitelist=self._whitelist_current,
+        )
+
+    def _toggle_adblock(self):
+        new_state = not adblock.is_enabled()
+        adblock.set_enabled(new_state)
+        log(f"[main] adblock enabled -> {new_state}")
+        # Reload page so the change takes effect immediately
+        self.engine.reload()
+
+    def _whitelist_current(self, host):
+        if not host:
+            return
+        adblock.whitelist_site(host)
+        log(f"[main] whitelisted: {host}")
+        self.engine.reload()
 
     def _navigate(self, raw: str):
         url = self._parse_url(raw)

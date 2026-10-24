@@ -66,3 +66,54 @@ def get_stats():
                 int(AdBlockClient.getBlockedHostCount()))
     except Exception:
         return (0, 0)
+
+def is_enabled() -> bool:
+    """True if ad blocking is globally enabled."""
+    if platform != "android":
+        return False
+    try:
+        from jnius import autoclass
+        AdBlockClient = autoclass("org.blackorange.operafast.AdBlockClient")
+        return bool(AdBlockClient.isEnabled())
+    except Exception:
+        return False
+
+
+def set_enabled(enabled: bool) -> bool:
+    """Toggle ad blocking globally. Returns new state."""
+    if platform != "android":
+        return False
+    try:
+        from jnius import autoclass
+        AdBlockClient = autoclass("org.blackorange.operafast.AdBlockClient")
+        AdBlockClient.setEnabled(bool(enabled))
+        return bool(AdBlockClient.isEnabled())
+    except Exception as e:
+        log(f"[adblock] set_enabled failed: {e}")
+        return False
+
+
+def whitelist_site(host: str) -> bool:
+    """Add host to per-site whitelist."""
+    if platform != "android" or not host:
+        return False
+    try:
+        from jnius import autoclass
+        AdBlockClient = autoclass("org.blackorange.operafast.AdBlockClient")
+        AdBlockClient.whitelistSite(host)
+        return True
+    except Exception as e:
+        log(f"[adblock] whitelist_site failed: {e}")
+        return False
+
+
+def host_of(url: str) -> str:
+    """Extract hostname from a URL string (pure Python, no jnius)."""
+    if not url:
+        return ""
+    try:
+        # http://host/path or https://host/path
+        from urllib.parse import urlparse
+        return urlparse(url).hostname or ""
+    except Exception:
+        return ""
