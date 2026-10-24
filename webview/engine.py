@@ -22,7 +22,7 @@ class WebViewEngine:
         WebView = autoclass("android.webkit.WebView")
         WebViewClient = autoclass("android.webkit.WebViewClient")
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        ViewGroup = autoclass("android.view.ViewGroup")
+        LayoutParams = autoclass("android.view.ViewGroup$LayoutParams")
         MarginLayoutParams = autoclass("android.view.ViewGroup$MarginLayoutParams")
         Color = autoclass("android.graphics.Color")
 
@@ -63,8 +63,8 @@ class WebViewEngine:
 
                 log("[engine] step 6: layout params")
                 params = MarginLayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    LayoutParams.MATCH_PARENT,
+                    LayoutParams.MATCH_PARENT,
                 )
                 params.topMargin = engine_ref._top_bar_height_px
                 log("[engine] params OK")
