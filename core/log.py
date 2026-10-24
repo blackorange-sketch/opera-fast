@@ -1,22 +1,32 @@
-"""Shared file logger for OperaFast (works without ADB)."""
+"""Shared file logger for OperaFast — writes to externally-readable path."""
 import os
 
 
-def _storage_dir() -> str:
-    try:
-        from android.storage import app_storage_path
-        return app_storage_path()
-    except Exception:
-        return os.path.expanduser("~/.operafast")
-
-
 def log_path() -> str:
-    d = _storage_dir()
+    # Prefer external app-specific dir: /sdcard/Android/data/<pkg>/files/operafast.log
+    # Visible in any file manager on Android 13 without permissions.
     try:
-        os.makedirs(d, exist_ok=True)
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        act = PythonActivity.mActivity
+        if act is not None:
+            ext = act.getExternalFilesDir(None)
+            if ext is not None:
+                p = ext.getAbsolutePath()
+                os.makedirs(p, exist_ok=True)
+                return os.path.join(p, "operafast.log")
     except Exception:
         pass
-    return os.path.join(d, "operafast.log")
+    # Fallback: internal storage
+    try:
+        from android.storage import app_storage_path
+        d = app_storage_path()
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, "operafast.log")
+    except Exception:
+        d = os.path.expanduser("~/.operafast")
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, "operafast.log")
 
 
 def log(msg: str) -> None:
@@ -28,7 +38,7 @@ def log(msg: str) -> None:
         pass
 
 
-def read_log(max_lines: int = 100) -> str:
+def read_log(max_lines: int = 200) -> str:
     try:
         with open(log_path(), "r", encoding="utf-8") as f:
             lines = f.readlines()

@@ -1,10 +1,4 @@
-"""Android WebView wrapper for OperaFast.
-
-Key trick: Kivy on Android draws via SDL2 SurfaceView, which is drawn
-above any regular View added via Activity.addContentView. To show
-WebView above SDL2, we add it to WindowManager as TYPE_APPLICATION_PANEL,
-a separate window-layer attached to the Activity via token.
-"""
+"""Android WebView wrapper for OperaFast (diagnostic, no WindowManager)."""
 import traceback
 from kivy.utils import platform
 
@@ -16,12 +10,10 @@ class WebViewEngine:
         self._wv = None
         self._top_bar_height_px = int(top_bar_height_px)
         self._pending_url = None
-        self._wm = None
-        self._params = None
 
     def attach(self, kivy_slot):
         if platform != "android":
-            log("[engine] non-android: mock mode")
+            log("[engine] non-android: mock")
             return
 
         from jnius import autoclass
@@ -30,92 +22,83 @@ class WebViewEngine:
         WebView = autoclass("android.webkit.WebView")
         WebViewClient = autoclass("android.webkit.WebViewClient")
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        Context = autoclass("android.content.Context")
-        WindowManager = autoclass("android.view.WindowManager")
-        WMLayoutParams = autoclass("android.view.WindowManager$LayoutParams")
-        Gravity = autoclass("android.view.Gravity")
+        ViewGroup = autoclass("android.view.ViewGroup")
+        MarginLayoutParams = autoclass("android.view.ViewGroup$MarginLayoutParams")
         Color = autoclass("android.graphics.Color")
-        PixelFormat = autoclass("android.graphics.PixelFormat")
 
         engine_ref = self
 
         @run_on_ui_thread
         def _create():
             try:
+                log("[engine] step 1: get activity")
                 act = PythonActivity.mActivity
-                log(f"[engine] activity = {act}")
+                log(f"[engine] act={act}")
                 if act is None:
-                    log("[engine] FATAL: mActivity is None")
                     return
 
+                log("[engine] step 2: construct WebView")
                 wv = WebView(act)
-                try:
-                    wv.setBackgroundColor(Color.RED)  # diagnostic
-                except Exception as e:
-                    log(f"[engine] setBackgroundColor failed: {e}")
+                log("[engine] wv created")
 
-                try:
-                    s = wv.getSettings()
-                    s.setJavaScriptEnabled(True)
-                    s.setDomStorageEnabled(True)
-                    s.setDatabaseEnabled(True)
-                    s.setSupportZoom(False)
-                    s.setBuiltInZoomControls(False)
-                    s.setDisplayZoomControls(False)
-                    s.setMediaPlaybackRequiresUserGesture(False)
-                    s.setLoadWithOverviewMode(True)
-                    s.setUseWideViewPort(True)
-                except Exception as e:
-                    log(f"[engine] settings failed: {e}")
+                log("[engine] step 3: bg color RED")
+                wv.setBackgroundColor(Color.RED)
 
-                try:
-                    wv.setWebViewClient(WebViewClient())
-                except Exception as e:
-                    log(f"[engine] setWebViewClient failed: {e}")
+                log("[engine] step 4: settings")
+                s = wv.getSettings()
+                s.setJavaScriptEnabled(True)
+                s.setDomStorageEnabled(True)
+                s.setDatabaseEnabled(True)
+                s.setSupportZoom(False)
+                s.setBuiltInZoomControls(False)
+                s.setDisplayZoomControls(False)
+                s.setMediaPlaybackRequiresUserGesture(False)
+                s.setLoadWithOverviewMode(True)
+                s.setUseWideViewPort(True)
+                log("[engine] settings OK")
 
-                # --- WindowManager path ---
-                log("[engine] getting WindowManager...")
-                wm = act.getSystemService(Context.WINDOW_SERVICE)
-                log(f"[engine] wm = {wm}")
+                log("[engine] step 5: setWebViewClient")
+                wv.setWebViewClient(WebViewClient())
+                log("[engine] client OK")
 
-                params = WMLayoutParams(
-                    WMLayoutParams.MATCH_PARENT,
-                    WMLayoutParams.MATCH_PARENT,
-                    WMLayoutParams.TYPE_APPLICATION_PANEL,
-                    WMLayoutParams.FLAG_NOT_TOUCH_MODAL,
-                    PixelFormat.TRANSLUCENT,
+                log("[engine] step 6: layout params")
+                params = MarginLayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
                 )
-                params.gravity = Gravity.TOP
-                params.y = engine_ref._top_bar_height_px
+                params.topMargin = engine_ref._top_bar_height_px
+                log("[engine] params OK")
+
+                log("[engine] step 7: addContentView")
+                act.addContentView(wv, params)
+                log("[engine] addContentView OK")
 
                 try:
-                    token = act.getWindow().getDecorView().getWindowToken()
-                    log(f"[engine] token = {token}")
-                    params.token = token
+                    wv.bringToFront()
+                    log("[engine] bringToFront OK")
                 except Exception as e:
-                    log(f"[engine] token set failed: {e}")
-
-                log("[engine] calling wm.addView...")
-                wm.addView(wv, params)
-                log("[engine] wm.addView OK")
+                    log(f"[engine] bringToFront failed: {e}")
 
                 engine_ref._wv = wv
-                engine_ref._wm = wm
-                engine_ref._params = params
+                log("[engine] wv assigned")
 
                 if engine_ref._pending_url:
                     url = engine_ref._pending_url
                     engine_ref._pending_url = None
-                    log(f"[engine] loading queued URL: {url}")
+                    log(f"[engine] step 8: load({url})")
                     wv.loadUrl(url)
                 else:
-                    log("[engine] loading about:blank")
+                    log("[engine] step 8: load(about:blank)")
                     wv.loadUrl("about:blank")
+
+                log("[engine] done")
             except Exception as e:
-                log(f"[engine] create failed: {e}")
+                log(f"[engine] EXC: {e}")
                 log(traceback.format_exc())
 
+        log("[engine] attach: calling _create()")
         _create()
+        log("[engine] attach: returned")
 
     def _ui(self, fn):
         from android.runnable import run_on_ui_thread
@@ -123,7 +106,7 @@ class WebViewEngine:
 
     def load(self, url):
         if self._wv is None:
-            log(f"[engine] queueing URL (wv not ready): {url}")
+            log(f"[engine] queue URL: {url}")
             self._pending_url = url
             return
         log(f"[engine] load({url})")

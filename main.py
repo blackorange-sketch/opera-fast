@@ -10,7 +10,7 @@ from kivy.utils import platform
 from kivy.graphics import Color as GColor, Rectangle
 
 from webview.engine import WebViewEngine
-from core.log import read_log, clear_log, log
+from core.log import read_log, clear_log, log, log_path
 
 TOP_BAR_H = dp(52)
 
@@ -19,16 +19,12 @@ class BrowserRoot(BoxLayout):
     def __init__(self, **kw):
         super().__init__(orientation="vertical", **kw)
 
-        # Clear log at each startup so we see only this session's messages
         clear_log()
 
         top = BoxLayout(
-            size_hint_y=None,
-            height=TOP_BAR_H,
-            spacing=dp(4),
-            padding=[dp(4), dp(4)],
+            size_hint_y=None, height=TOP_BAR_H,
+            spacing=dp(4), padding=[dp(4), dp(4)],
         )
-
         btn_back = Button(text="\u2190", size_hint_x=None, width=dp(40))
         btn_back.bind(on_press=lambda *_: self.engine.go_back())
         btn_fwd = Button(text="\u2192", size_hint_x=None, width=dp(40))
@@ -37,10 +33,8 @@ class BrowserRoot(BoxLayout):
         btn_reload.bind(on_press=lambda *_: self.engine.reload())
 
         self.url = TextInput(
-            text="https://duckduckgo.com",
-            multiline=False,
-            size_hint_y=None,
-            height=dp(40),
+            text="https://duckduckgo.com", multiline=False,
+            size_hint_y=None, height=dp(40),
         )
         self.url.bind(on_text_validate=self._navigate)
 
@@ -54,25 +48,19 @@ class BrowserRoot(BoxLayout):
         top.add_widget(btn_go)
         self.add_widget(top)
 
-        # Placeholder area — shows live log so we can diagnose without ADB.
         self.placeholder = BoxLayout()
         with self.placeholder.canvas.before:
-            GColor(1, 1, 1, 1)  # white bg
-            self._rect = Rectangle(
-                pos=self.placeholder.pos, size=self.placeholder.size
-            )
+            GColor(1, 1, 1, 1)
+            self._rect = Rectangle(pos=self.placeholder.pos, size=self.placeholder.size)
         self.placeholder.bind(
             pos=lambda *a: setattr(self._rect, "pos", self.placeholder.pos),
             size=lambda *a: setattr(self._rect, "size", self.placeholder.size),
         )
 
         self.log_label = Label(
-            text="[boot]",
-            size_hint=(1, None),
-            halign="left",
-            valign="top",
-            font_size="10sp",
-            color=(0, 0, 0, 1),
+            text="[boot]", size_hint=(1, None),
+            halign="left", valign="top",
+            font_size="9sp", color=(0, 0, 0, 1),
             text_size=(None, None),
         )
         self.log_label.bind(
@@ -86,20 +74,31 @@ class BrowserRoot(BoxLayout):
         self.placeholder.add_widget(sv)
         self.add_widget(self.placeholder)
 
+        # Write log file path so it is visible on screen before any crash
+        try:
+            log(f"[main] log file: {log_path()}")
+        except Exception:
+            pass
+
         self.engine = WebViewEngine(top_bar_height_px=int(TOP_BAR_H))
 
         if platform == "android":
             Clock.schedule_once(self._boot_engine, 0.8)
-            Clock.schedule_interval(self._refresh_log, 1.5)
+            Clock.schedule_interval(self._refresh_log, 0.3)
 
     def _boot_engine(self, _):
-        log("[main] booting engine")
-        self.engine.attach(None)
-        self.engine.load("https://duckduckgo.com")
+        try:
+            log("[main] booting engine")
+            self.engine.attach(None)
+            self.engine.load("https://duckduckgo.com")
+        except Exception as e:
+            import traceback
+            log(f"[main] boot engine EXC: {e}")
+            log(traceback.format_exc())
 
     def _refresh_log(self, _dt):
         try:
-            text = read_log(120)
+            text = read_log(200)
             if text != self.log_label.text:
                 self.log_label.text = text
         except Exception as e:
