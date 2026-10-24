@@ -1,0 +1,1 @@
+"""OperaFast core package."""

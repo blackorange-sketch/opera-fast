@@ -3,7 +3,7 @@ title = OperaFast
 package.name = operafast
 package.domain = org.blackorange
 source.dir = .
-source.include_exts = py,kv,png,jpg,json,html,css,js,gz
+source.include_exts = py,kv,png,jpg,json,html,css,js,gz,ttf,txt
 version = 0.1.0
 
 blacklist_requirements = libthorvg
