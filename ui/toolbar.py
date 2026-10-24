@@ -17,8 +17,6 @@ from ui.icons import (
 
 
 class _IconButton(Button):
-    """Flat transparent button that renders a Material Icons glyph."""
-
     def __init__(self, codepoint="", font_name=None, **kw):
         super().__init__(**kw)
         self.text = codepoint
@@ -28,15 +26,12 @@ class _IconButton(Button):
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)
         self.color = TEXT_PRIMARY
-        # Material Icons look best at 24sp; ASCII fallback is smaller.
         self.font_size = "24sp" if ICONS_AVAILABLE else "18sp"
         self.size_hint_x = None
         self.width = dp(ICON_BUTTON_WIDTH_DP)
 
 
 class Toolbar(BoxLayout):
-    """Top toolbar with back/forward/reload/url/tabs/menu."""
-
     def __init__(self, callbacks=None, **kw):
         super().__init__(
             orientation="horizontal",
@@ -116,10 +111,18 @@ class Toolbar(BoxLayout):
         self.url_input.background_color = BG_INPUT_FOCUS if focused else BG_INPUT
 
     def set_url(self, url: str) -> None:
-        if not self.url_input.focus:
-            self.url_input.text = url or ""
+        """Update URL text unless user is actively typing.
+
+        Scrolls the field to the very beginning so the scheme/host is
+        visible instead of the trailing query string.
+        """
+        if self.url_input.focus:
+            return
+        self.url_input.text = url or ""
+        # Reset horizontal scroll + caret to start (Kivy otherwise
+        # keeps the viewport at the previous caret position, e.g. end).
+        self.url_input.scroll_x = 0
+        self.url_input.cursor = (0, 0)
 
     def set_tab_count(self, n: int) -> None:
-        # Tab count indicator will be added in Phase 1.3 as a badge,
-        # not by overwriting the icon (Material Icons has no "2" glyph).
         pass
