@@ -43,28 +43,28 @@ final class DownloadSheet extends FrameLayout {
         sheet.setOrientation(LinearLayout.VERTICAL);
         sheet.setBackground(UI.roundedTop(UI.SHEET_BG, UI.dp(c, 26)));
         sheet.setClickable(true);
-        sheet.setPadding(UI.dp(c, 20), UI.dp(c, 24), UI.dp(c, 20), UI.dp(c, 8));
+        sheet.setPadding(UI.dp(c, 18), UI.dp(c, 16), UI.dp(c, 18), UI.dp(c, 4));
 
         // ---- icon + editable name
         LinearLayout top = new LinearLayout(c);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView icon = UI.icon(c, UI.DOWNLOAD, 26, 0xFF4A2C00);
-        icon.setBackground(UI.rounded(0xFFFFB74D, UI.dp(c, 28)));
-        top.addView(icon, new LinearLayout.LayoutParams(UI.dp(c, 56), UI.dp(c, 56)));
+        TextView icon = UI.icon(c, UI.DOWNLOAD, 20, 0xFF4A2C00);
+        icon.setBackground(UI.rounded(0xFFFFB74D, UI.dp(c, 22)));
+        top.addView(icon, new LinearLayout.LayoutParams(UI.dp(c, 44), UI.dp(c, 44)));
 
         final EditText field = new EditText(c);
         field.setText(name);
         field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT);
         field.setTextColor(UI.TEXT);
-        field.setTextSize(20);
+        field.setTextSize(16);
         field.setBackgroundTintList(android.content.res.ColorStateList.valueOf(UI.TEXT_MUTED));
         field.setSelectAllOnFocus(false);
         LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        fl.leftMargin = UI.dp(c, 16);
+        fl.leftMargin = UI.dp(c, 12);
         top.addView(field, fl);
-        TextView pencil = UI.icon(c, UI.EDIT, 22, UI.TEXT_MUTED);
+        TextView pencil = UI.icon(c, UI.EDIT, 18, UI.TEXT_MUTED);
         pencil.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -75,7 +75,7 @@ final class DownloadSheet extends FrameLayout {
                 if (im != null) im.showSoftInput(field, 0);
             }
         });
-        top.addView(pencil, new LinearLayout.LayoutParams(UI.dp(c, 44), UI.dp(c, 44)));
+        top.addView(pencil, new LinearLayout.LayoutParams(UI.dp(c, 40), UI.dp(c, 40)));
         sheet.addView(top, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -87,14 +87,14 @@ final class DownloadSheet extends FrameLayout {
         stroke.setStroke(UI.dp(c, 1), UI.TEXT_MUTED);
         chip.setBackground(stroke);
         chip.setPadding(UI.dp(c, 12), 0, UI.dp(c, 8), 0);
-        chip.addView(UI.icon(c, UI.FOLDER, 20, UI.TEXT),
+        chip.addView(UI.icon(c, UI.FOLDER, 16, UI.TEXT),
                 new LinearLayout.LayoutParams(UI.dp(c, 28), ViewGroup.LayoutParams.MATCH_PARENT));
-        folderLabel = UI.label(c, "", 16, UI.TEXT);
+        folderLabel = UI.label(c, "", 13, UI.TEXT);
         LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ll.leftMargin = UI.dp(c, 8);
         chip.addView(folderLabel, ll);
-        chip.addView(UI.icon(c, UI.DROP_DOWN, 22, UI.TEXT),
+        chip.addView(UI.icon(c, UI.DROP_DOWN, 18, UI.TEXT),
                 new LinearLayout.LayoutParams(UI.dp(c, 28), ViewGroup.LayoutParams.MATCH_PARENT));
         chip.setClickable(true);
         chip.setOnClickListener(new View.OnClickListener() {
@@ -104,8 +104,8 @@ final class DownloadSheet extends FrameLayout {
             }
         });
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, UI.dp(c, 40));
-        cl.topMargin = UI.dp(c, 16);
+                ViewGroup.LayoutParams.WRAP_CONTENT, UI.dp(c, 32));
+        cl.topMargin = UI.dp(c, 10);
         sheet.addView(chip, cl);
         refreshFolder();
 
@@ -113,7 +113,7 @@ final class DownloadSheet extends FrameLayout {
         line.setBackgroundColor(UI.DIVIDER);
         LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 1));
-        dl.topMargin = UI.dp(c, 18);
+        dl.topMargin = UI.dp(c, 10);
         sheet.addView(line, dl);
 
         // ---- actions
@@ -125,14 +125,14 @@ final class DownloadSheet extends FrameLayout {
                 listener.onConfirm(n);
             }
         }), new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 72)));
+                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 54)));
         sheet.addView(action(c, UI.CLOSE, S.t("Cancel"), "", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 listener.onCancel();
             }
         }), new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 64)));
+                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 46)));
 
         addView(sheet, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
@@ -144,16 +144,16 @@ final class DownloadSheet extends FrameLayout {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setBackground(UI.ripple());
-        row.addView(UI.icon(c, glyph, 24, UI.TEXT),
-                new LinearLayout.LayoutParams(UI.dp(c, 40), ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(UI.icon(c, glyph, 20, UI.TEXT),
+                new LinearLayout.LayoutParams(UI.dp(c, 32), ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout text = new LinearLayout(c);
         text.setOrientation(LinearLayout.VERTICAL);
-        TextView t = UI.label(c, title, 20, UI.TEXT);
+        TextView t = UI.label(c, title, 16, UI.TEXT);
         text.addView(t);
-        if (sub != null && !sub.isEmpty()) text.addView(UI.label(c, sub, 15, UI.TEXT_MUTED));
+        if (sub != null && !sub.isEmpty()) text.addView(UI.label(c, sub, 12, UI.TEXT_MUTED));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        lp.leftMargin = UI.dp(c, 20);
+        lp.leftMargin = UI.dp(c, 14);
         row.addView(text, lp);
         row.setOnClickListener(click);
         return row;

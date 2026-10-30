@@ -737,19 +737,46 @@ public class MainActivity extends Activity implements WebFactory.Host {
         try {
             int[] loc = new int[2];
             webHost.getLocationInWindow(loc);
+            // only the page itself: leave out the floating bars (and anything sitting on them)
+            int top = loc[1] + dp(WebFactory.INSET_TOP);
+            int bottom = loc[1] + webHost.getHeight() - dp(52);
             int w = webHost.getWidth();
-            int h = webHost.getHeight();
+            int h = bottom - top;
+            if (h <= 0) {
+                done.run();
+                return;
+            }
             int tw = 360;
             int th = Math.max(1, tw * h / w);
             final Bitmap bmp = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
-            Rect r = new Rect(loc[0], loc[1], loc[0] + w, loc[1] + h);
-            PixelCopy.request(getWindow(), r, bmp, new PixelCopy.OnPixelCopyFinishedListener() {
+            Rect r = new Rect(loc[0], top, loc[0] + w, bottom);
+            final boolean snackWas = snackBar.getVisibility() == View.VISIBLE;
+            final boolean loginWas = loginBar.getVisibility() == View.VISIBLE;
+            if (snackWas) snackBar.setVisibility(View.INVISIBLE);
+            if (loginWas) loginBar.setVisibility(View.INVISIBLE);
+            final Rect fr = r;
+            Runnable copy = new Runnable() {
+                @Override
+                public void run() {
+                    try {
+            PixelCopy.request(getWindow(), fr, bmp, new PixelCopy.OnPixelCopyFinishedListener() {
                 @Override
                 public void onPixelCopyFinished(int result) {
+                    if (snackWas) snackBar.setVisibility(View.VISIBLE);
+                    if (loginWas) loginBar.setVisibility(View.VISIBLE);
                     if (result == PixelCopy.SUCCESS) t.thumb = bmp;
                     done.run();
                 }
             }, ui);
+                    } catch (Exception e) {
+                        if (snackWas) snackBar.setVisibility(View.VISIBLE);
+                        if (loginWas) loginBar.setVisibility(View.VISIBLE);
+                        done.run();
+                    }
+                }
+            };
+            if (snackWas || loginWas) ui.postDelayed(copy, 80);   // let a frame draw without them
+            else copy.run();
         } catch (Exception e) {
             done.run();
         }
@@ -1135,7 +1162,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     private void openSwitcher() {
         final float aspect = webHost.getWidth() > 0
-                ? (float) webHost.getHeight() / webHost.getWidth() : 1.6f;
+                ? (float) (webHost.getHeight() - dp(WebFactory.INSET_TOP) - dp(52)) / webHost.getWidth()
+                : 1.6f;
         captureThumb(shown, new Runnable() {
             @Override
             public void run() {
