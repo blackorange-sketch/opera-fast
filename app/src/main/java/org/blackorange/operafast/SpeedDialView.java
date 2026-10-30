@@ -125,7 +125,7 @@ final class SpeedDialView extends ScrollView {
         }
     }
 
-    private View frame(Context c, String letter, int color, boolean dashed, String label) {
+    private LinearLayout frame(Context c, String letter, int color, boolean dashed, String label) {
         LinearLayout t = new LinearLayout(c);
         t.setOrientation(LinearLayout.VERTICAL);
         t.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -163,7 +163,7 @@ final class SpeedDialView extends ScrollView {
         final String[] sc = items.get(index);
         String letter = sc[0].isEmpty() ? "?" : sc[0].substring(0, 1).toUpperCase();
         int color = PALETTE[Math.abs(sc[1].hashCode()) % PALETTE.length];
-        View t = frame(c, letter, color, false, sc[0]);
+        LinearLayout t = frame(c, letter, color, false, sc[0]);
         final TextView circle = (TextView) t.getChildAt(0);
         Favicons.load(c, sc[1], new Favicons.Callback() {
             @Override
