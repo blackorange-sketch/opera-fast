@@ -1337,7 +1337,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private void setBars(boolean show) {
         if (show != barsHidden) return;       // already in that state
         barsHidden = !show;
-        barsFreeze = System.currentTimeMillis() + 450;   // ignore the scroll jitter caused by resizing
+        barsFreeze = System.currentTimeMillis() + 650;   // ignore the scroll jitter caused by resizing
         scrollAcc = 0;
         if (barsAnim != null) barsAnim.cancel();
         if (show && barsTh == 0) {
@@ -1356,6 +1356,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
         final boolean hiding = !show;
         barsAnim = android.animation.ValueAnimator.ofFloat(barsFrac, show ? 0f : 1f);
         barsAnim.setDuration(200);
+        // hiding: the page is already resized but still covered by the bars; give the renderer a
+        // moment to paint the new area before revealing it (no white flash)
+        if (hiding) barsAnim.setStartDelay(130);
         barsAnim.setInterpolator(new android.view.animation.DecelerateInterpolator());
         barsAnim.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
             @Override
