@@ -340,14 +340,24 @@ final class WebFactory {
         if (!(tag instanceof Tab)) return;
         Tab t = (Tab) tag;
         if (t.priv || !Settings.cacheFirst() || t.url == null || !t.url.startsWith("http")) return;
-        if (t.url.equals(t.revalidated)) {
-            t.revalidated = null;   // the refresh finished: back to cache-first
-            view.getSettings().setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+        if (t.revalidated != null) {
+            // this navigation was already refreshed once (or the user reloaded): never again
+            applyDisplayPrefs(view);
             return;
         }
         boolean fast = System.currentTimeMillis() - t.startedAt < 1500;   // loaded quickly = from cache
         if (!fast || view.getScrollY() > 0 || !online(view.getContext())) return;
-        t.revalidated = t.url;
+        freshReload(view);
+    }
+
+    /** Reload that revalidates with the server, once per navigation. */
+    static void freshReload(WebView view) {
+        Object tag = view.getTag();
+        if (tag instanceof Tab) {
+            Tab t = (Tab) tag;
+            t.selfReload = true;
+            t.revalidated = t.url == null ? "" : t.url;
+        }
         view.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
         view.reload();
     }
@@ -407,6 +417,8 @@ final class WebFactory {
             if (url != null) tab.url = url;
             tab.loading = true;
             tab.startedAt = System.currentTimeMillis();
+            if (tab.selfReload) tab.selfReload = false;
+            else tab.revalidated = null;
             tab.progress = 0;
             tab.blocked.set(0);
             tab.favicon = favicon;

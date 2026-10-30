@@ -355,7 +355,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
                     t.wv.stopLoading();
                 } else {
                     WebFactory.applyDisplayPrefs(t.wv);
-                    t.wv.reload();
+                    WebFactory.freshReload(t.wv);
                 }
             }
         });
@@ -957,7 +957,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         Tab t = shown;
         if (t != null && t.wv != null) {
             WebFactory.applyDisplayPrefs(t.wv);
-            t.wv.reload();
+            WebFactory.freshReload(t.wv);
         }
     }
 

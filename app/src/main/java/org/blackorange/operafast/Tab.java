@@ -25,6 +25,7 @@ final class Tab {
     Bitmap thumb;             // small screenshot for the tab switcher (taken when it opens)
     boolean loading;
     long startedAt;           // when the current page load began (hybrid cache heuristic)
+    boolean selfReload;       // the next page start is our own refresh
     String revalidated;       // url that was already refreshed in the background
     int progress;
     long lastUsed;
