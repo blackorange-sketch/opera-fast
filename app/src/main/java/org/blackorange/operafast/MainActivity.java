@@ -1345,6 +1345,11 @@ public class MainActivity extends Activity implements WebFactory.Host {
                         SiteSettings.setDesktop(WebFactory.hostOf(t.url), t.desktop);
                         if (t.wv != null) {
                             WebFactory.applyUserAgent(t.wv, t.desktop);
+                            // the cached copy was built for the other layout: go to the network
+                            t.wv.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_NO_CACHE);
+                            t.wv.clearCache(false);
+                            t.selfReload = true;
+                            t.revalidated = t.url == null ? "" : t.url;
                             WebFactory.again(t.wv);
                         }
                         scheduleSave();

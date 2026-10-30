@@ -557,6 +557,7 @@ final class WebFactory {
             if (tab.fallbackHttp != null && tab.url != null && tab.url.startsWith("https://")) {
                 tab.fallbackHttp = null; // the upgrade worked
             }
+            applyDisplayPrefs(view); // back to the normal cache mode after a forced network load
             if (!Settings.compat()) {
                 passwordHooks(view, tab, host);
                 syncBackground(view, host);
