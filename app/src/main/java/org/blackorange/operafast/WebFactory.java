@@ -503,11 +503,15 @@ final class WebFactory {
             if (url != null) tab.url = url;
             tab.loading = true;
             tab.startedAt = System.currentTimeMillis();
-            if (tab.selfReload) tab.selfReload = false;
-            else tab.revalidated = null;
+            if (tab.selfReload) {
+                tab.selfReload = false;
+                tab.issue("---- background refresh (reload) ----");
+            } else {
+                tab.revalidated = null;
+                tab.clearIssues();
+            }
             tab.progress = 0;
             tab.blocked.set(0);
-            if (!tab.selfReload) tab.clearIssues();
             tab.favicon = favicon;
             if (tab.priv) PrivateData.note(view.getContext(), hostOf(tab.url));
             applySitePrefs(view, tab);
