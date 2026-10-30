@@ -456,6 +456,7 @@ final class WebFactory {
                     boolean css = accept != null && accept.startsWith("text/css");
                     if (!css && AdBlock.shouldBlock(u.getHost(), pageHost)) {
                         tab.blocked.incrementAndGet();
+                        tab.issue("BLOCKED " + u);
                         return new WebResourceResponse("text/plain", "utf-8",
                                 new ByteArrayInputStream(new byte[0]));
                     }
@@ -506,6 +507,7 @@ final class WebFactory {
             else tab.revalidated = null;
             tab.progress = 0;
             tab.blocked.set(0);
+            if (!tab.selfReload) tab.clearIssues();
             tab.favicon = favicon;
             if (tab.priv) PrivateData.note(view.getContext(), hostOf(tab.url));
             applySitePrefs(view, tab);
@@ -537,8 +539,16 @@ final class WebFactory {
         }
 
         @Override
+        public void onReceivedHttpError(WebView view, WebResourceRequest req,
+                                        WebResourceResponse resp) {
+            tab.issue("HTTP " + resp.getStatusCode() + " " + req.getUrl());
+        }
+
+        @Override
         public void onReceivedError(WebView view, WebResourceRequest req,
                                     android.webkit.WebResourceError err) {
+            tab.issue((req.isForMainFrame() ? "MAIN ERR " : "ERR ") + err.getErrorCode() + " "
+                    + err.getDescription() + " " + req.getUrl());
             if (req.isForMainFrame() && tab.fallbackHttp != null) {
                 // the https twin does not work: go back to plain http once, for this host
                 String http = tab.fallbackHttp;
@@ -551,6 +561,7 @@ final class WebFactory {
         @Override
         public void onReceivedSslError(WebView view, android.webkit.SslErrorHandler handler,
                                        android.net.http.SslError error) {
+            tab.issue("SSL " + error.getPrimaryError() + " " + error.getUrl());
             String shown = tab.url == null ? "" : tab.url;
             String failing = error.getUrl() == null ? "" : error.getUrl();
             if (hostOf(shown) != null && hostOf(shown).equals(hostOf(failing))) {
@@ -574,6 +585,15 @@ final class WebFactory {
         Chrome(Tab tab, Host host) {
             this.tab = tab;
             this.host = host;
+        }
+
+        @Override
+        public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+            if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR
+                    || m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING) {
+                tab.issue("JS " + m.message() + " (" + m.sourceId() + ":" + m.lineNumber() + ")");
+            }
+            return false;
         }
 
         @Override

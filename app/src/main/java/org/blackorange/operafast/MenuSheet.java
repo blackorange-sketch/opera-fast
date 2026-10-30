@@ -41,6 +41,7 @@ final class MenuSheet extends FrameLayout {
     static final int TEXT_SIZE = 24;
     static final int QR = 25;
     static final int COPY_LINK = 26;
+    static final int ISSUES = 27;
 
     interface Listener {
         /** Flip the setting; return its new state. */

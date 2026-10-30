@@ -32,6 +32,7 @@ final class Tab {
     int progress;
     long lastUsed;
     int crashes;              // renderer crashes since the user last loaded something here
+    private final java.util.ArrayList<String> issues = new java.util.ArrayList<String>();
     final AtomicInteger blocked = new AtomicInteger();
 
     Tab(String url) {
@@ -42,6 +43,27 @@ final class Tab {
         this.id = id;
         this.url = url == null ? "" : url;
         this.lastUsed = System.currentTimeMillis();
+    }
+
+    /** Diagnostics: failed / blocked requests and script errors of the current page. */
+    void issue(String line) {
+        synchronized (issues) {
+            if (issues.size() < 80) issues.add(line);
+        }
+    }
+
+    void clearIssues() {
+        synchronized (issues) {
+            issues.clear();
+        }
+    }
+
+    String issuesText() {
+        synchronized (issues) {
+            StringBuilder sb = new StringBuilder();
+            for (String s : issues) sb.append(s).append('\n');
+            return sb.toString();
+        }
     }
 
     boolean isBlank() {

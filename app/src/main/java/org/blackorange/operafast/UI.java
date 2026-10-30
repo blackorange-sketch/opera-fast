@@ -99,6 +99,7 @@ final class UI {
     static final String FOLDER = "\ue2c7";
     static final String EDIT = "\ue3c9";
     static final String DROP_DOWN = "\ue5c5";
+    static final String INFO = "\ue88e";
     static final String QR = "\ue00a";
     static final String GLOBE = "";
 

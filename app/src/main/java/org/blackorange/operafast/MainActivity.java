@@ -1392,6 +1392,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
                     case MenuSheet.QR:
                         showQr();
                         break;
+                    case MenuSheet.ISSUES:
+                        showIssues();
+                        break;
                     case MenuSheet.COPY_LINK:
                         copyLink();
                         break;
@@ -2143,6 +2146,40 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (t != null && t.wv != null) t.wv.findNext(forward);
     }
 
+    private void showIssues() {
+        final Tab t = shown;
+        if (t == null) return;
+        String text = t.issuesText();
+        if (text.isEmpty()) text = S.t("No problems recorded for this page");
+        final String all = "UA: " + (t.wv == null ? "" : t.wv.getSettings().getUserAgentString())
+                + "\nURL: " + t.url + "\n\n" + text;
+        TextView tv = new TextView(this);
+        tv.setText(all);
+        tv.setTextSize(11);
+        tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        tv.setTextColor(UI.TEXT);
+        tv.setTextIsSelectable(true);
+        tv.setPadding(dp(16), dp(8), dp(16), dp(8));
+        ScrollView sv = new ScrollView(this);
+        sv.addView(tv);
+        new AlertDialog.Builder(this, UI.dialogTheme())
+                .setTitle(S.t("Page problems"))
+                .setView(sv)
+                .setPositiveButton(S.t("Copy"), new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        android.content.ClipboardManager cm =
+                                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                        if (cm != null) {
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("issues", all));
+                            toast(S.t("Copied"));
+                        }
+                    }
+                })
+                .setNegativeButton(S.t("Close"), null)
+                .show();
+    }
+
     private void copyLink() {
         Tab t = shown;
         if (t == null || t.isBlank()) return;
@@ -2171,6 +2208,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
                 {MenuSheet.TRANSLATE, UI.TRANSLATE, "Translate page"},
                 {MenuSheet.TEXT_SIZE, UI.TEXT_FIELDS, "Text size"},
                 {MenuSheet.ADD_HOME, UI.HOME, "Add to home screen"},
+                {MenuSheet.ISSUES, UI.INFO, "Page problems"},
         };
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
