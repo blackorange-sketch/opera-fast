@@ -31,6 +31,9 @@ final class MenuSheet extends FrameLayout {
     static final int FIND = 14;
     static final int SHARE = 15;
     static final int CLEAR = 16;
+    static final int NEW_PRIVATE = 17;
+    static final int PASSWORDS = 18;
+    static final int SETTINGS = 19;
 
     interface Listener {
         /** Flip the setting; return its new state. */
@@ -99,8 +102,11 @@ final class MenuSheet extends FrameLayout {
                 button(c, FIND, UI.FIND, "Find in page", pageOpen, listener),
                 button(c, SHARE, UI.SHARE, "Share page", pageOpen, listener));
         addButtons(c, body, listener,
-                button(c, CLEAR, UI.DELETE, "Clear data", true, listener),
-                null);
+                button(c, NEW_PRIVATE, UI.PRIVATE, "New private tab", true, listener),
+                button(c, PASSWORDS, UI.KEY, "Passwords", true, listener));
+        addButtons(c, body, listener,
+                button(c, SETTINGS, UI.SETTINGS, "Settings", true, listener),
+                button(c, CLEAR, UI.DELETE, "Clear data", true, listener));
 
         sheet.addView(body, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -126,6 +132,7 @@ final class MenuSheet extends FrameLayout {
 
         TextView name = UI.label(c, label, 12, UI.TEXT);
         name.setGravity(Gravity.CENTER);
+        name.setMaxLines(2);
         LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         nlp.topMargin = UI.dp(c, 6);
@@ -152,7 +159,7 @@ final class MenuSheet extends FrameLayout {
         GradientDrawable bg = UI.rounded(on ? TILE_ON_BG : TILE_OFF_BG, UI.dp(c, 28));
         tileIcons[slot].setBackground(bg);
         tileIcons[slot].setTextColor(on ? TILE_ON_ICON : UI.TEXT);
-        tileSubs[slot].setText(on ? "On" : "Off");
+        tileSubs[slot].setText(S.t(on ? "On" : "Off"));
     }
 
     // ---------------------------------------------------------------- action buttons
@@ -167,7 +174,8 @@ final class MenuSheet extends FrameLayout {
 
         b.addView(UI.icon(c, glyph, 22, BUTTON_ICON),
                 new LinearLayout.LayoutParams(UI.dp(c, 30), ViewGroup.LayoutParams.MATCH_PARENT));
-        TextView t = UI.label(c, label, 15, UI.TEXT);
+        TextView t = UI.label(c, label, 14, UI.TEXT);
+        t.setMaxLines(2);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         lp.leftMargin = UI.dp(c, 10);

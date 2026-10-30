@@ -13,6 +13,7 @@ final class Tab {
     volatile String url;
     String title = "";
     boolean desktop;
+    boolean priv;             // private tab: no history, no saved logins, not restored
     String openerId;          // tab that opened this one (back closes it and returns there)
 
     WebView wv;               // null until the tab is shown for the first time / after eviction

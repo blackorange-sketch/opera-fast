@@ -52,8 +52,8 @@ final class HistoryView extends LinearLayout {
             @Override
             public void onClick(View v) {
                 new AlertDialog.Builder(c, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
-                        .setMessage("Clear all browsing history?")
-                        .setPositiveButton("Clear", new DialogInterface.OnClickListener() {
+                        .setMessage(S.t("Clear all browsing history?"))
+                        .setPositiveButton(S.t("Clear"), new DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(DialogInterface d, int w) {
                                 HistoryDb.get(c).clear();
@@ -61,7 +61,7 @@ final class HistoryView extends LinearLayout {
                                 showEmpty();
                             }
                         })
-                        .setNegativeButton("Cancel", null)
+                        .setNegativeButton(S.t("Cancel"), null)
                         .show();
             }
         };

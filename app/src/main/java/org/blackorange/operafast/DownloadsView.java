@@ -101,7 +101,7 @@ final class DownloadsView extends LinearLayout {
             public void onClick(View v) {
                 if (it.status != DownloadManager.STATUS_SUCCESSFUL) return;
                 if (!Downloads.open(c, it)) {
-                    Toast.makeText(c, "No app can open this file", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(c, S.t("No app can open this file"), Toast.LENGTH_SHORT).show();
                 }
             }
         });
@@ -111,7 +111,7 @@ final class DownloadsView extends LinearLayout {
 
         LinearLayout text = new LinearLayout(c);
         text.setOrientation(VERTICAL);
-        text.addView(UI.label(c, it.title == null ? "download" : it.title, 15, UI.TEXT));
+        text.addView(UI.label(c, it.title == null ? S.t("download") : it.title, 15, UI.TEXT));
         int statusColor = it.status == DownloadManager.STATUS_FAILED ? UI.ACCENT : UI.TEXT_MUTED;
         text.addView(UI.label(c, Downloads.statusText(it), 12, statusColor));
         row.addView(text, new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -133,15 +133,15 @@ final class DownloadsView extends LinearLayout {
         boolean running = it.status != DownloadManager.STATUS_SUCCESSFUL
                 && it.status != DownloadManager.STATUS_FAILED;
         new AlertDialog.Builder(c, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
-                .setMessage(running ? "Cancel this download?" : "Delete \"" + it.title + "\"?")
-                .setPositiveButton(running ? "Cancel download" : "Delete",
+                .setMessage(running ? S.t("Cancel this download?") : S.t("Delete") + " \"" + it.title + "\"?")
+                .setPositiveButton(running ? S.t("Cancel download") : S.t("Delete"),
                         new DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(DialogInterface d, int w) {
                                 Downloads.remove(getContext(), it.id);
                             }
                         })
-                .setNegativeButton("Keep", null)
+                .setNegativeButton(S.t("Keep"), null)
                 .setOnDismissListener(new DialogInterface.OnDismissListener() {
                     @Override
                     public void onDismiss(DialogInterface d) {

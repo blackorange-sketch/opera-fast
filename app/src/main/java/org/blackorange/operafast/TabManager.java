@@ -15,6 +15,14 @@ final class TabManager {
         return tabs;
     }
 
+    int privateCount() {
+        int n = 0;
+        for (Tab t : tabs) {
+            if (t.priv) n++;
+        }
+        return n;
+    }
+
     int size() {
         return tabs.size();
     }
@@ -32,7 +40,12 @@ final class TabManager {
     }
 
     Tab add(String url, Tab opener) {
+        return add(url, opener, false);
+    }
+
+    Tab add(String url, Tab opener, boolean priv) {
         Tab t = new Tab(url);
+        t.priv = priv;
         if (opener != null) t.openerId = opener.id;
         tabs.add(t);
         return t;
@@ -64,6 +77,7 @@ final class TabManager {
         try {
             JSONArray arr = new JSONArray();
             for (Tab t : tabs) {
+                if (t.priv) continue;
                 JSONObject o = new JSONObject();
                 o.put("id", t.id);
                 o.put("url", t.url == null ? "" : t.url);
@@ -74,7 +88,7 @@ final class TabManager {
             }
             JSONObject root = new JSONObject();
             root.put("tabs", arr);
-            root.put("active", active == null ? "" : active.id);
+            root.put("active", active == null || active.priv ? "" : active.id);
             return root.toString();
         } catch (Exception e) {
             return null;

@@ -29,7 +29,7 @@ final class TabSwitcherView extends FrameLayout {
 
         void onClose(Tab tab);
 
-        void onNew();
+        void onNew(boolean priv);
 
         void onDone();
 
@@ -52,6 +52,13 @@ final class TabSwitcherView extends FrameLayout {
     private HorizontalScrollView stripScroll;
     private LinearLayout strip;
     private TextView countLabel;
+    private TextView tabsTitle;
+    private TextView privTitle;
+    private View tabsLine;
+    private View privLine;
+    private TextView emptyLabel;
+    private UI.TabCount pillCount;
+    private boolean priv;
 
     private int builtWidth = -1;
     private int step = 1;
@@ -63,6 +70,7 @@ final class TabSwitcherView extends FrameLayout {
         this.tabs = tabs;
         this.listener = listener;
         this.aspect = aspect;
+        this.priv = tabs.active() != null && tabs.active().priv;
         setClickable(true);
         setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{0xFF2B2140, 0xFF15141C}));
@@ -78,20 +86,44 @@ final class TabSwitcherView extends FrameLayout {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(UI.dp(c, 20), UI.dp(c, 8), UI.dp(c, 20), 0);
 
-        LinearLayout titleBox = new LinearLayout(c);
-        titleBox.setOrientation(LinearLayout.VERTICAL);
-        TextView title = UI.label(c, "Tabs", 18, UI.TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        titleBox.addView(title, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        View underline = new View(c);
-        underline.setBackgroundColor(UI.ACCENT);
-        LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 2));
-        ulp.topMargin = UI.dp(c, 6);
-        titleBox.addView(underline, ulp);
-        header.addView(titleBox, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout[] boxes = new LinearLayout[2];
+        for (int k = 0; k < 2; k++) {
+            final boolean forPrivate = k == 1;
+            LinearLayout box = new LinearLayout(c);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setClickable(true);
+            TextView title = UI.label(c, forPrivate ? "Private" : "Tabs", 18, UI.TEXT);
+            title.setTypeface(Typeface.DEFAULT_BOLD);
+            box.addView(title, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            View underline = new View(c);
+            underline.setBackgroundColor(UI.ACCENT);
+            LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 2));
+            ulp.topMargin = UI.dp(c, 6);
+            box.addView(underline, ulp);
+            box.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (priv != forPrivate) {
+                        priv = forPrivate;
+                        index = -1;
+                        reload();
+                    }
+                }
+            });
+            if (forPrivate) {
+                privTitle = title;
+                privLine = underline;
+            } else {
+                tabsTitle = title;
+                tabsLine = underline;
+            }
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (forPrivate) blp.leftMargin = UI.dp(c, 22);
+            header.addView(box, blp);
+        }
 
         View grow = new View(c);
         header.addView(grow, new LinearLayout.LayoutParams(0, 1, 1f));
@@ -113,6 +145,12 @@ final class TabSwitcherView extends FrameLayout {
         carouselArea.addView(carousel, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER_VERTICAL));
+        emptyLabel = UI.label(c, "No tabs", 15, UI.TEXT_MUTED);
+        emptyLabel.setGravity(Gravity.CENTER);
+        emptyLabel.setVisibility(View.GONE);
+        carouselArea.addView(emptyLabel, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER));
         column.addView(carouselArea, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
@@ -154,13 +192,17 @@ final class TabSwitcherView extends FrameLayout {
         column.addView(new View(c), new LinearLayout.LayoutParams(1, UI.dp(c, 96)));
 
         addView(buildBar(c), barParams(c));
+
+        // Build straight away from the screen size; do not depend on a layout callback.
+        android.util.DisplayMetrics dm = c.getResources().getDisplayMetrics();
+        rebuild(dm.widthPixels, dm.heightPixels - UI.dp(c, 24));
     }
 
     // ---------------------------------------------------------------- floating bar
 
     private FrameLayout.LayoutParams barParams(Context c) {
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 60), Gravity.BOTTOM);
+                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 64), Gravity.BOTTOM);
         int m = UI.dp(c, 16);
         lp.setMargins(m, 0, m, m);
         return lp;
@@ -170,8 +212,7 @@ final class TabSwitcherView extends FrameLayout {
         LinearLayout bar = new LinearLayout(c);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setClipChildren(false);
-        bar.setBackground(UI.rounded(0xFF1E1E26, UI.dp(c, 30)));
+        bar.setBackground(UI.rounded(0xFF1E1E26, UI.dp(c, 32)));
         bar.setElevation(UI.dp(c, 8));
 
         TextView dl = UI.iconButton(c, UI.DOWNLOAD, 24);
@@ -193,29 +234,28 @@ final class TabSwitcherView extends FrameLayout {
         bar.addView(hist, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 
         FrameLayout fabSlot = new FrameLayout(c);
-        fabSlot.setClipChildren(false);
-        TextView fab = UI.icon(c, UI.ADD, 30, 0xFFFFFFFF);
+        TextView fab = UI.icon(c, UI.ADD, 28, 0xFFFFFFFF);
         GradientDrawable fabBg = new GradientDrawable();
         fabBg.setShape(GradientDrawable.OVAL);
         fabBg.setColor(UI.ACCENT);
         fab.setBackground(fabBg);
         fab.setElevation(UI.dp(c, 6));
         fab.setClickable(true);
-        fab.setTranslationY(-UI.dp(c, 8));
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                listener.onNew();
+                listener.onNew(priv);
             }
         });
-        fabSlot.addView(fab, new FrameLayout.LayoutParams(UI.dp(c, 64), UI.dp(c, 64), Gravity.CENTER));
+        fabSlot.addView(fab, new FrameLayout.LayoutParams(UI.dp(c, 54), UI.dp(c, 54), Gravity.CENTER));
         bar.addView(fabSlot, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 
         FrameLayout countBtn = new FrameLayout(c);
         countBtn.setBackground(UI.ripple());
         countBtn.setClickable(true);
         UI.TabCount count = new UI.TabCount(c);
-        count.setCount(tabs.size());
+        pillCount = count;
+        count.setCount(visible().size());
         countBtn.addView(count, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         countBtn.setOnClickListener(new View.OnClickListener() {
@@ -245,18 +285,59 @@ final class TabSwitcherView extends FrameLayout {
         if (w > 0 && h > 0 && w != builtWidth) rebuild(w, h);
     }
 
+    /** Tabs shown in the current mode (normal or private). */
+    private List<Tab> visible() {
+        List<Tab> out = new java.util.ArrayList<Tab>();
+        for (Tab t : tabs.all()) {
+            if (t.priv == priv) out.add(t);
+        }
+        return out;
+    }
+
+    private int lastW, lastH;
+
     /** Called by the host after a tab was closed. */
     void reload() {
-        if (getWidth() > 0 && getHeight() > 0) rebuild(getWidth(), getHeight());
+        if (lastW > 0) rebuild(lastW, lastH);
     }
 
     private void rebuild(int w, int h) {
+        try {
+            doRebuild(w, h);
+        } catch (Throwable e) {
+            // never leave the screen blank without saying why
+            cards.removeAllViews();
+            TextView err = UI.label(getContext(), String.valueOf(e), 12, UI.TEXT_MUTED);
+            err.setMaxLines(8);
+            err.setEllipsize(null);
+            cards.addView(err, new LinearLayout.LayoutParams(w, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+    }
+
+    private void doRebuild(int w, int h) {
         final Context c = getContext();
+        lastW = w;
+        lastH = h;
         builtWidth = w;
-        List<Tab> list = tabs.all();
+        List<Tab> list = visible();
+        int bright = 0xFFFFFFFF, dim = UI.TEXT_MUTED;
+        tabsTitle.setTextColor(priv ? dim : bright);
+        privTitle.setTextColor(priv ? bright : dim);
+        tabsLine.setVisibility(priv ? View.INVISIBLE : View.VISIBLE);
+        privLine.setVisibility(priv ? View.VISIBLE : View.INVISIBLE);
+        pillCount.setCount(list.size());
+        emptyLabel.setText(S.t(priv ? "No private tabs" : "No tabs"));
+        emptyLabel.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
+        countLabel.setText(S.tabs(list.size()));
+        setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                priv ? new int[]{0xFF2A1646, 0xFF120C1E} : new int[]{0xFF2B2140, 0xFF15141C}));
+        if (list.isEmpty()) {
+            cards.removeAllViews();
+            strip.removeAllViews();
+            return;
+        }
         if (index < 0) index = Math.max(0, list.indexOf(tabs.active()));
         index = Math.min(index, list.size() - 1);
-        countLabel.setText(list.size() == 1 ? "1 tab" : list.size() + " tabs");
 
         int cardW = (int) (w * 0.68f);
         int margin = UI.dp(c, 8);

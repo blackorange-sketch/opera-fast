@@ -112,19 +112,19 @@ final class Downloads {
     static String statusText(Item it) {
         switch (it.status) {
             case DownloadManager.STATUS_SUCCESSFUL:
-                return "Completed" + (it.total > 0 ? " · " + size(it.total) : "");
+                return S.t("Completed") + (it.total > 0 ? " · " + size(it.total) : "");
             case DownloadManager.STATUS_FAILED:
-                return "Failed";
+                return S.t("Failed");
             case DownloadManager.STATUS_PAUSED:
-                return "Paused";
+                return S.t("Paused");
             case DownloadManager.STATUS_PENDING:
-                return "Waiting…";
+                return S.t("Waiting…");
             default:
                 if (it.total > 0) {
                     int pct = (int) (it.done * 100 / it.total);
-                    return "Downloading " + pct + "% · " + size(it.done) + " / " + size(it.total);
+                    return S.t("Downloading ") + pct + "% · " + size(it.done) + " / " + size(it.total);
                 }
-                return "Downloading… " + size(it.done);
+                return S.t("Downloading… ") + size(it.done);
         }
     }
 

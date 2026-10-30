@@ -57,3 +57,9 @@ The APK is signed with the committed `android/debug.keystore`, so new builds upd
 - Bottom-sheet menu with toggles: ad blocker, night mode, desktop site, no images
 - Bookmarks, find in page, long-press on a link (new tab / copy / share)
 - Smooth animations: overlays, menu, tab switch, progress bar
+
+## Update: passwords, private tabs, Ukrainian, settings
+- Save / auto-fill logins (AES-GCM, key in Android Keystore), manage them in Menu -> Passwords
+- Private tabs (separate "Private" section in the tab switcher): no history, no saved logins, not restored; cookies of visited sites are removed when the last private tab closes. Screenshots are blocked while one is open.
+- Ukrainian UI (Settings -> Language, default follows the system)
+- Settings: language, search engine, start page (speed dial or a custom address), editable speed dial (long-press a tile, "+" to add)

@@ -47,6 +47,9 @@ final class WebFactory {
 
         /** Long press on a link. */
         void onLinkLongPress(Tab tab, String url);
+
+        /** A login form was submitted (called on the main thread). */
+        void onPasswordSubmit(Tab tab, String user, String pass);
     }
 
     static WebView create(Context ctx, final Tab tab, final Host host) {
@@ -70,6 +73,12 @@ final class WebFactory {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         applyUserAgent(wv, tab.desktop);
         applyDisplayPrefs(wv);
+        if (tab.priv) {
+            s.setSaveFormData(false);
+            s.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        } else {
+            wv.addJavascriptInterface(new PassBridge(tab, host), "OFPass");
+        }
 
         wv.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
@@ -104,6 +113,66 @@ final class WebFactory {
             }
         });
         return wv;
+    }
+
+    /** JS -> Java: only lets a page *offer* a login to be saved; nothing can be read back. */
+    private static final class PassBridge {
+        private final Tab tab;
+        private final Host host;
+
+        PassBridge(Tab tab, Host host) {
+            this.tab = tab;
+            this.host = host;
+        }
+
+        @android.webkit.JavascriptInterface
+        public void save(final String user, final String pass) {
+            if (pass == null || pass.isEmpty() || pass.length() > 256) return;
+            final String u = user == null ? "" : user;
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    host.onPasswordSubmit(tab, u.length() > 256 ? u.substring(0, 256) : u, pass);
+                }
+            });
+        }
+    }
+
+    private static final String CAPTURE_JS = "(function(){if(window.__ofp)return;window.__ofp=1;"
+            + "function grab(root){var ps=(root||document).querySelectorAll('input[type=password]');"
+            + "var p=null;for(var i=0;i<ps.length;i++){if(ps[i].value){p=ps[i];break;}}if(!p)return;"
+            + "var scope=p.form||document,ins=scope.querySelectorAll('input'),prev=null;"
+            + "for(var j=0;j<ins.length;j++){if(ins[j]===p)break;var t=(ins[j].type||'text').toLowerCase();"
+            + "if((t=='text'||t=='email'||t=='tel')&&ins[j].value)prev=ins[j];}"
+            + "try{OFPass.save(prev?prev.value:'',p.value);}catch(e){}}"
+            + "document.addEventListener('submit',function(e){grab(e.target)},true);"
+            + "document.addEventListener('click',function(e){var t=e.target&&e.target.closest?"
+            + "e.target.closest('button,input[type=submit]'):null;if(t&&t.type!='button'&&t.type!='reset')grab(document)},true);"
+            + "document.addEventListener('keydown',function(e){if(e.key=='Enter')grab(document)},true);})();";
+
+    private static String fillJs(String user, String pass) {
+        return "(function(u,p){var n=0;function set(e,v){var d=Object.getOwnPropertyDescriptor("
+                + "HTMLInputElement.prototype,'value');d.set.call(e,v);"
+                + "e.dispatchEvent(new Event('input',{bubbles:true}));"
+                + "e.dispatchEvent(new Event('change',{bubbles:true}));}"
+                + "function f(){var ps=document.querySelectorAll('input[type=password]'),done=false;"
+                + "for(var i=0;i<ps.length;i++){var e=ps[i];if(e.offsetParent===null||e.value)continue;"
+                + "var scope=e.form||document,ins=scope.querySelectorAll('input'),prev=null;"
+                + "for(var j=0;j<ins.length;j++){if(ins[j]===e)break;var t=(ins[j].type||'text').toLowerCase();"
+                + "if((t=='text'||t=='email'||t=='tel')&&ins[j].offsetParent!==null)prev=ins[j];}"
+                + "if(prev&&!prev.value)set(prev,u);set(e,p);done=true;}"
+                + "if(!done&&++n<12)setTimeout(f,500);}f();})("
+                + org.json.JSONObject.quote(user) + "," + org.json.JSONObject.quote(pass) + ");";
+    }
+
+    /** Offers saved login for https pages and installs the form-submit watcher. */
+    private static void passwordHooks(WebView view, Tab tab) {
+        if (tab.priv || !Settings.savePasswords()) return;
+        view.evaluateJavascript(CAPTURE_JS, null);
+        String url = tab.url;
+        if (url == null || !url.startsWith("https://")) return;
+        PasswordStore.Item it = PasswordStore.find(hostOf(url), null);
+        if (it != null && !it.pass.isEmpty()) view.evaluateJavascript(fillJs(it.user, it.pass), null);
     }
 
     /**
@@ -187,6 +256,7 @@ final class WebFactory {
             tab.progress = 0;
             tab.blocked.set(0);
             tab.favicon = favicon;
+            if (tab.priv) PrivateData.note(view.getContext(), hostOf(tab.url));
             host.onTabState(tab);
         }
 
@@ -197,7 +267,8 @@ final class WebFactory {
             tab.progress = 100;
             String title = view.getTitle();
             if (title != null && !title.isEmpty()) tab.title = title;
-            HistoryDb.get(view.getContext()).visit(tab.url, tab.title);
+            if (!tab.priv) HistoryDb.get(view.getContext()).visit(tab.url, tab.title);
+            passwordHooks(view, tab);
             host.onTabState(tab);
         }
 
@@ -233,7 +304,7 @@ final class WebFactory {
         public void onReceivedTitle(WebView view, String title) {
             if (title == null) return;
             tab.title = title;
-            HistoryDb.get(view.getContext()).setTitle(tab.url, title);
+            if (!tab.priv) HistoryDb.get(view.getContext()).setTitle(tab.url, title);
             host.onTabState(tab);
         }
 

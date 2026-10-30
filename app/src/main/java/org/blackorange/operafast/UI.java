@@ -61,6 +61,10 @@ final class UI {
     static final String DOWN = "";
     static final String GLOBE = "";
 
+    static final String PRIVATE = "\ue8f5";
+    static final String SETTINGS = "\ue8b8";
+    static final String KEY = "\ue0da";
+
     private static Typeface iconFont;
 
     static int dp(Context c, float v) {
@@ -107,7 +111,7 @@ final class UI {
 
     static TextView label(Context c, String text, int sp, int color) {
         TextView t = new TextView(c);
-        t.setText(text);
+        t.setText(S.t(text));
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         t.setTextColor(color);
         t.setMaxLines(1);

@@ -81,6 +81,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private UI.TabCount tabCount;
     private UI.ProgressLine progress;
 
+    private LinearLayout topBar;
+    private LinearLayout bottomBar;
+    private boolean passwordsFromSettings;
+    private boolean pwPromptOpen;
     private View overlay;
     private LinearLayout findBar;
     private EditText findField;
@@ -105,6 +109,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
         super.onCreate(savedInstanceState);
         AdBlock.init(this);
         Settings.init(this);
+        PasswordStore.init(this);
+        PrivateData.wipe(this); // leftovers of a private session that was killed
 
         boolean restored = tabs.restore(
                 getSharedPreferences("session", MODE_PRIVATE).getString("data", null));
@@ -178,7 +184,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
         rootLayout.setFocusableInTouchMode(true);
 
         // ---- top: address pill
-        LinearLayout top = new LinearLayout(this);
+        final LinearLayout top = new LinearLayout(this);
+        topBar = top;
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setBackgroundColor(UI.BG_BAR);
@@ -202,7 +209,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         urlField.setBackground(null);
         urlField.setTextColor(UI.TEXT);
         urlField.setHintTextColor(UI.TEXT_MUTED);
-        urlField.setHint("Search or enter address");
+        urlField.setHint(S.t("Search or enter address"));
         urlField.setTextSize(14);
         urlField.setPadding(dp(4), 0, dp(4), 0);
         urlField.setInputType(android.text.InputType.TYPE_CLASS_TEXT
@@ -268,7 +275,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         findField.setBackground(null);
         findField.setTextColor(UI.TEXT);
         findField.setHintTextColor(UI.TEXT_MUTED);
-        findField.setHint("Find in page");
+        findField.setHint(S.t("Find in page"));
         findField.setTextSize(15);
         findField.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
         findField.setSingleLine(true);
@@ -343,6 +350,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.HORIZONTAL);
         bottom.setBackgroundColor(UI.BG_BAR);
+        bottomBar = bottom;
 
         backBtn = UI.iconButton(this, UI.BACK, 24);
         backBtn.setOnClickListener(new View.OnClickListener() {
@@ -406,6 +414,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         }
         shown = t;
         tabs.activate(t);
+        speedDial.setPrivateMode(t.priv);
 
         if (t.isBlank() && t.wv == null && t.state == null) {
             webHost.setVisibility(View.GONE);
@@ -456,12 +465,18 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     private void newTab() {
+        newTab(shown != null && shown.priv);
+    }
+
+    private void newTab(final boolean priv) {
         // grab a preview of the page we are leaving, then open the new tab
         captureThumb(shown, new Runnable() {
             @Override
             public void run() {
-                Tab t = tabs.add(null, null);
+                String home = priv ? "" : Settings.homeUrl();
+                Tab t = tabs.add(home.isEmpty() ? null : home, null, priv);
                 showTab(t);
+                if (!home.isEmpty()) return;
                 urlField.requestFocus();
                 ui.post(new Runnable() {
                     @Override
@@ -510,6 +525,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         boolean wasShown = t == shown;
         destroyWebView(t);
         Tab next = tabs.close(t);
+        if (t.priv && tabs.privateCount() == 0) PrivateData.wipe(this);
         if (wasShown) {
             shown = null;
             showTab(next);
@@ -559,6 +575,11 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (p instanceof ViewGroup) ((ViewGroup) p).removeView(w);
         try {
             w.stopLoading();
+            if (t.priv) {
+                w.clearCache(true);
+                w.clearFormData();
+                w.clearHistory();
+            }
             w.destroy();
         } catch (Exception ignored) {
         }
@@ -576,8 +597,21 @@ public class MainActivity extends Activity implements WebFactory.Host {
         fwdBtn.setAlpha(fwd ? 1f : 0.35f);
         reloadBtn.setText(t.loading ? UI.CLOSE : UI.REFRESH);
         tabCount.setCount(tabs.size());
+        int bar = t.priv ? 0xFF241B35 : UI.BG_BAR;
+        topBar.setBackgroundColor(bar);
+        bottomBar.setBackgroundColor(bar);
+        updateSecure();
         progress.setProgress(t.loading ? t.progress : 100);
         updateShield();
+    }
+
+    /** No screenshots / recents thumbnails while any private tab exists. */
+    private void updateSecure() {
+        if (tabs.privateCount() > 0) {
+            getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        } else {
+            getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        }
     }
 
     private void updateUrlField() {
@@ -608,13 +642,13 @@ public class MainActivity extends Activity implements WebFactory.Host {
         final Tab t = shown;
         if (t == null) return;
         final String host = WebFactory.hostOf(t.url);
-        String msg = "Blocked on this page: " + t.blocked.get()
-                + "\nBlocked in total: " + AdBlock.totalBlocked()
-                + "\nRules loaded: " + AdBlock.ruleCount();
+        String msg = S.t("Blocked on this page: ") + t.blocked.get()
+                + "\n" + S.t("Blocked in total: ") + AdBlock.totalBlocked()
+                + "\n" + S.t("Rules loaded: ") + AdBlock.ruleCount();
         AlertDialog.Builder b = new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
-                .setTitle("Ad blocker")
+                .setTitle(S.t("Ad blocker"))
                 .setMessage(msg)
-                .setPositiveButton(AdBlock.isEnabled() ? "Turn off" : "Turn on",
+                .setPositiveButton(S.t(AdBlock.isEnabled() ? "Turn off" : "Turn on"),
                         new android.content.DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(android.content.DialogInterface d, int w) {
@@ -623,10 +657,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
                                 updateShield();
                             }
                         })
-                .setNegativeButton("Close", null);
+                .setNegativeButton(S.t("Close"), null);
         if (host != null && AdBlock.isEnabled()) {
             final boolean allowed = AdBlock.isAllowed(host);
-            b.setNeutralButton(allowed ? "Block on this site" : "Allow on this site",
+            b.setNeutralButton(S.t(allowed ? "Block on this site" : "Allow on this site"),
                     new android.content.DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(android.content.DialogInterface d, int w) {
@@ -676,7 +710,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             }
             if (s.indexOf('.') > 0 && !s.endsWith(".")) return "https://" + s;
         }
-        return SEARCH_URL + Uri.encode(s);
+        return Settings.searchUrl() + Uri.encode(s);
     }
 
     private boolean canCloseToOpener(Tab t) {
@@ -818,9 +852,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
                             }
 
                             @Override
-                            public void onNew() {
+                            public void onNew(boolean priv) {
                                 closeOverlay();
-                                newTab();
+                                newTab(priv);
                             }
 
                             @Override
@@ -948,6 +982,16 @@ public class MainActivity extends Activity implements WebFactory.Host {
                     case MenuSheet.CLEAR:
                         confirmClearData();
                         break;
+                    case MenuSheet.NEW_PRIVATE:
+                        newTab(true);
+                        break;
+                    case MenuSheet.PASSWORDS:
+                        passwordsFromSettings = false;
+                        showPasswords();
+                        break;
+                    case MenuSheet.SETTINGS:
+                        showSettings();
+                        break;
                     default:
                         break;
                 }
@@ -967,16 +1011,92 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (reloadShown) reloadActive();
     }
 
+    private void showSettings() {
+        showOverlay(new SettingsView(this, new SettingsView.Listener() {
+            @Override
+            public void onClose() {
+                closeOverlay();
+            }
+
+            @Override
+            public void onPasswords() {
+                passwordsFromSettings = true;
+                showPasswords();
+            }
+
+            @Override
+            public void onLanguageChanged() {
+                saveSession();
+                recreate();
+            }
+
+            @Override
+            public void onDialChanged() {
+                speedDial.refresh();
+            }
+
+            @Override
+            public void onClearData() {
+                confirmClearData();
+            }
+        }));
+    }
+
+    private void showPasswords() {
+        showOverlay(new PasswordsView(this, new PasswordsView.Listener() {
+            @Override
+            public void onClose() {
+                closeOverlay();
+                if (passwordsFromSettings) {
+                    passwordsFromSettings = false;
+                    showSettings();
+                }
+            }
+        }));
+    }
+
+    @Override
+    public void onPasswordSubmit(Tab tab, String user, String pass) {
+        if (tab.priv || tab != shown || pwPromptOpen || !Settings.savePasswords()) return;
+        final String host = WebFactory.hostOf(tab.url);
+        if (host == null) return;
+        final String u = user;
+        final String p = pass;
+        PasswordStore.Item old = PasswordStore.find(host, u);
+        if (old != null && p.equals(old.pass)) return;
+        final boolean update = old != null;
+        pwPromptOpen = true;
+        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle(S.t(update ? "Update password?" : "Save password?"))
+                .setMessage(host + (u.isEmpty() ? "" : "\n" + u))
+                .setPositiveButton(S.t(update ? "Update" : "Save"),
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d, int w) {
+                                toast(S.t(PasswordStore.save(host, u, p)
+                                        ? "Password saved" : "Could not save the password"));
+                            }
+                        })
+                .setNegativeButton(S.t("Not now"), null)
+                .setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+                    @Override
+                    public void onDismiss(android.content.DialogInterface d) {
+                        pwPromptOpen = false;
+                    }
+                })
+                .show();
+    }
+
     private void toggleBookmark() {
         Tab t = shown;
         if (t == null || t.isBlank()) return;
         HistoryDb db = HistoryDb.get(this);
         if (db.isBookmarked(t.url)) {
             db.removeBookmark(t.url);
-            toast("Bookmark removed");
+            toast(S.t("Bookmark removed"));
         } else {
             db.addBookmark(t.url, t.title);
-            toast("Bookmark added");
+            toast(S.t("Bookmark added"));
         }
     }
 
@@ -1036,13 +1156,13 @@ public class MainActivity extends Activity implements WebFactory.Host {
         i.setType("text/plain");
         i.putExtra(Intent.EXTRA_TEXT, t.url);
         if (t.title != null && !t.title.isEmpty()) i.putExtra(Intent.EXTRA_SUBJECT, t.title);
-        startActivity(Intent.createChooser(i, "Share page"));
+        startActivity(Intent.createChooser(i, S.t("Share page")));
     }
 
     private void confirmClearData() {
         new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
-                .setMessage("Clear history, cookies, site data and cache?")
-                .setPositiveButton("Clear", new android.content.DialogInterface.OnClickListener() {
+                .setMessage(S.t("Clear history, cookies, site data and cache?"))
+                .setPositiveButton(S.t("Clear"), new android.content.DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(android.content.DialogInterface d, int w) {
                         HistoryDb.get(MainActivity.this).clear();
@@ -1055,10 +1175,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
                                 t.wv.clearFormData();
                             }
                         }
-                        toast("Browsing data cleared");
+                        toast(S.t("Browsing data cleared"));
                     }
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(S.t("Cancel"), null)
                 .show();
     }
 
@@ -1085,7 +1205,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private void startDownload(String url, String ua, String cd, String mime) {
         if (url == null) return;
         if (url.startsWith("blob:") || url.startsWith("data:")) {
-            toast("This kind of download is not supported yet");
+            toast(S.t("This kind of download is not supported yet"));
             return;
         }
         if (Build.VERSION.SDK_INT < 29
@@ -1103,9 +1223,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
         }
         try {
             String name = Downloads.enqueue(this, url, ua, cd, mime);
-            toast("Downloading " + name);
+            toast(S.t("Downloading ") + name);
         } catch (Exception e) {
-            toast("Could not start the download");
+            toast(S.t("Could not start the download"));
         }
     }
 
@@ -1119,7 +1239,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
                 startDownload(p[0], p[1], p[2], p[3]);
             } else {
-                toast("Storage permission is needed to save files");
+                toast(S.t("Storage permission is needed to save files"));
             }
         }
     }
@@ -1141,7 +1261,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     @Override
     public Tab onOpenWindow(Tab opener) {
-        Tab nt = tabs.add(null, opener);
+        Tab nt = tabs.add(null, opener, opener.priv);
         nt.wv = WebFactory.create(this, nt, this);
         showTab(nt);
         return nt;
@@ -1237,27 +1357,27 @@ public class MainActivity extends Activity implements WebFactory.Host {
     public void onLinkLongPress(final Tab tab, final String url) {
         new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
                 .setTitle(UI.hostOf(url))
-                .setItems(new CharSequence[]{"Open in new tab", "Copy link", "Share link"},
+                .setItems(new CharSequence[]{S.t("Open in new tab"), S.t("Copy link"), S.t("Share link")},
                         new android.content.DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(android.content.DialogInterface d, int which) {
                                 if (which == 0) {
-                                    tabs.add(url, tab);
+                                    tabs.add(url, tab, tab.priv);
                                     syncBars();
                                     scheduleSave();
-                                    toast("Opened in a new tab");
+                                    toast(S.t("Opened in a new tab"));
                                 } else if (which == 1) {
                                     ClipboardManager cm =
                                             (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                                     if (cm != null) {
                                         cm.setPrimaryClip(ClipData.newPlainText("link", url));
                                     }
-                                    toast("Link copied");
+                                    toast(S.t("Link copied"));
                                 } else {
                                     Intent i = new Intent(Intent.ACTION_SEND);
                                     i.setType("text/plain");
                                     i.putExtra(Intent.EXTRA_TEXT, url);
-                                    startActivity(Intent.createChooser(i, "Share link"));
+                                    startActivity(Intent.createChooser(i, S.t("Share link")));
                                 }
                             }
                         })
@@ -1272,7 +1392,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         tab.loading = false;
         if (++tab.crashes > 2) {
             tab.url = "";
-            toast("This page keeps crashing");
+            toast(S.t("This page keeps crashing"));
         }
         if (wasShown) {
             shown = null;
