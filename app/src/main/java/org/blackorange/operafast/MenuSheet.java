@@ -40,6 +40,7 @@ final class MenuSheet extends FrameLayout {
     static final int ADD_HOME = 23;
     static final int TEXT_SIZE = 24;
     static final int QR = 25;
+    static final int COPY_LINK = 26;
 
     interface Listener {
         /** Flip the setting; return its new state. */
@@ -93,32 +94,19 @@ final class MenuSheet extends FrameLayout {
         View gap = new View(c);
         body.addView(gap, new LinearLayout.LayoutParams(1, UI.dp(c, 18)));
 
-        // ---- action grid
-        addButtons(c, body, listener,
-                button(c, BOOKMARKS, UI.BOOKMARK, "Bookmarks", true, listener),
-                button(c, DOWNLOADS, UI.DOWNLOAD, "Downloads", true, listener));
-        addButtons(c, body, listener,
-                button(c, HISTORY, UI.HISTORY, "History", true, listener),
-                button(c, BOOKMARK_PAGE, bookmarked ? UI.BOOKMARK : UI.BOOKMARK_BORDER,
-                        bookmarked ? "Remove bookmark" : "Add bookmark", pageOpen, listener));
-        addButtons(c, body, listener,
-                button(c, FIND, UI.FIND, "Find in page", pageOpen, listener),
-                button(c, SHARE, UI.SHARE, "Share page", pageOpen, listener));
-        addButtons(c, body, listener,
-                button(c, READER, UI.READER, "Reader view", pageOpen, listener),
-                button(c, TRANSLATE, UI.TRANSLATE, "Translate page", pageOpen, listener));
-        addButtons(c, body, listener,
-                button(c, TEXT_SIZE, UI.TEXT_FIELDS, "Text size", pageOpen, listener),
-                button(c, ADD_HOME, UI.HOME, "Add to home screen", pageOpen, listener));
-        addButtons(c, body, listener,
-                button(c, RECENT, UI.HISTORY, "Recently closed", true, listener),
-                button(c, NEW_PRIVATE, UI.PRIVATE, "New private tab", true, listener));
-        addButtons(c, body, listener,
-                button(c, PASSWORDS, UI.KEY, "Passwords", true, listener),
-                button(c, SETTINGS, UI.SETTINGS, "Settings", true, listener));
-        addButtons(c, body, listener,
-                button(c, CLEAR, UI.DELETE, "Clear data", true, listener),
-                button(c, QR, UI.QR, "QR code", pageOpen, listener));
+        // ---- grouped actions: icon over label, four per row
+        header(c, body, "Library");
+        addCells(c, body, listener,
+                cell(c, BOOKMARKS, UI.BOOKMARK, "Bookmarks", listener),
+                cell(c, HISTORY, UI.HISTORY, "History", listener),
+                cell(c, DOWNLOADS, UI.DOWNLOAD, "Downloads", listener),
+                cell(c, RECENT, UI.HISTORY, "Recently closed", listener));
+        header(c, body, "More");
+        addCells(c, body, listener,
+                cell(c, NEW_PRIVATE, UI.PRIVATE, "New private tab", listener),
+                cell(c, PASSWORDS, UI.KEY, "Passwords", listener),
+                cell(c, SETTINGS, UI.SETTINGS, "Settings", listener),
+                null);
 
         sheet.addView(body, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -174,52 +162,47 @@ final class MenuSheet extends FrameLayout {
         tileSubs[slot].setText(S.t(on ? "On" : "Off"));
     }
 
-    // ---------------------------------------------------------------- action buttons
+    // ---------------------------------------------------------------- action cells
 
-    private View button(Context c, final int id, String glyph, String label, boolean enabled,
-                        final Listener listener) {
+    private void header(Context c, LinearLayout body, String text) {
+        TextView h = UI.label(c, text, 12, UI.TEXT_MUTED);
+        h.setPadding(UI.dp(c, 6), UI.dp(c, 18), 0, UI.dp(c, 4));
+        body.addView(h, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    private View cell(Context c, final int id, String glyph, String label, final Listener listener) {
         LinearLayout b = new LinearLayout(c);
-        b.setOrientation(LinearLayout.HORIZONTAL);
-        b.setGravity(Gravity.CENTER_VERTICAL);
-        b.setBackground(UI.rounded(UI.TILE_OFF, UI.dp(c, 22)));
-        b.setPadding(UI.dp(c, 16), 0, UI.dp(c, 12), 0);
-
-        b.addView(UI.icon(c, glyph, 22, UI.BUTTON_ICON),
-                new LinearLayout.LayoutParams(UI.dp(c, 30), ViewGroup.LayoutParams.MATCH_PARENT));
-        TextView t = UI.label(c, label, 14, UI.TEXT);
+        b.setOrientation(LinearLayout.VERTICAL);
+        b.setGravity(Gravity.CENTER);
+        b.setBackground(UI.rounded(UI.TILE_OFF, UI.dp(c, 18)));
+        b.setPadding(UI.dp(c, 2), UI.dp(c, 8), UI.dp(c, 2), UI.dp(c, 8));
+        b.addView(UI.icon(c, glyph, 24, UI.BUTTON_ICON),
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, UI.dp(c, 30)));
+        TextView t = UI.label(c, label, 11, UI.TEXT);
         t.setMaxLines(2);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        lp.leftMargin = UI.dp(c, 10);
-        b.addView(t, lp);
-
-        if (enabled) {
-            b.setClickable(true);
-            b.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    listener.onAction(id);
-                }
-            });
-        } else {
-            b.setAlpha(0.4f);
-        }
+        t.setGravity(Gravity.CENTER);
+        b.addView(t, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        b.setClickable(true);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listener.onAction(id);
+            }
+        });
         return b;
     }
 
-    private void addButtons(Context c, LinearLayout body, Listener listener, View left, View right) {
+    private void addCells(Context c, LinearLayout body, Listener listener, View... cells) {
         LinearLayout row = new LinearLayout(c);
         row.setOrientation(LinearLayout.HORIZONTAL);
         int m = UI.dp(c, 4);
-
-        LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(0, UI.dp(c, 56), 1f);
-        l.setMargins(m, m, m, m);
-        row.addView(left, l);
-
-        LinearLayout.LayoutParams r = new LinearLayout.LayoutParams(0, UI.dp(c, 56), 1f);
-        r.setMargins(m, m, m, m);
-        row.addView(right != null ? right : new View(c), r);
-
+        for (View v : cells) {
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, UI.dp(c, 78), 1f);
+            lp.setMargins(m, m, m, m);
+            row.addView(v != null ? v : new View(c), lp);
+        }
         body.addView(row, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }

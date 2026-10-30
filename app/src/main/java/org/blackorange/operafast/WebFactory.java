@@ -39,7 +39,7 @@ final class WebFactory {
 
         boolean onFileChooser(ValueCallback<Uri[]> cb, WebChromeClient.FileChooserParams params);
 
-        void onDownload(String url, String userAgent, String contentDisposition, String mime);
+        void onDownload(Tab tab, String url, String userAgent, String contentDisposition, String mime);
 
         /** Non-web scheme (mailto:, tel:, intent:, market: ...) after a user gesture. */
         void onExternalUrl(String url);
@@ -90,6 +90,12 @@ final class WebFactory {
         applyUserAgent(wv, tab.desktop);
         applyDisplayPrefs(wv);
         s.setDatabaseEnabled(true);
+        if (android.os.Build.VERSION.SDK_INT >= 23) s.setOffscreenPreRaster(true);   // smoother scrolling
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            wv.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        }
+        wv.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        wv.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
         if (tab.priv) {
             s.setSaveFormData(false);
         } else {
@@ -132,7 +138,7 @@ final class WebFactory {
             @Override
             public void onDownloadStart(String url, String userAgent, String contentDisposition,
                                         String mimetype, long contentLength) {
-                host.onDownload(url, userAgent, contentDisposition, mimetype);
+                host.onDownload(tab, url, userAgent, contentDisposition, mimetype);
             }
         });
         return wv;
@@ -325,6 +331,27 @@ final class WebFactory {
         }
     }
 
+    /**
+     * Hybrid cache: the page was shown from the cache (fast load); when the reader hasn't
+     * scrolled yet, quietly revalidate it with the server so it is up to date.
+     */
+    private static void hybridRefresh(WebView view) {
+        Object tag = view.getTag();
+        if (!(tag instanceof Tab)) return;
+        Tab t = (Tab) tag;
+        if (t.priv || !Settings.cacheFirst() || t.url == null || !t.url.startsWith("http")) return;
+        if (t.url.equals(t.revalidated)) {
+            t.revalidated = null;   // the refresh finished: back to cache-first
+            view.getSettings().setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+            return;
+        }
+        boolean fast = System.currentTimeMillis() - t.startedAt < 1500;   // loaded quickly = from cache
+        if (!fast || view.getScrollY() > 0 || !online(view.getContext())) return;
+        t.revalidated = t.url;
+        view.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
+        view.reload();
+    }
+
     private static final class Client extends WebViewClient {
         private final Tab tab;
         private final Host host;
@@ -379,6 +406,7 @@ final class WebFactory {
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (url != null) tab.url = url;
             tab.loading = true;
+            tab.startedAt = System.currentTimeMillis();
             tab.progress = 0;
             tab.blocked.set(0);
             tab.favicon = favicon;
@@ -399,6 +427,7 @@ final class WebFactory {
                 tab.fallbackHttp = null; // the upgrade worked
             }
             passwordHooks(view, tab, host);
+            hybridRefresh(view);
             host.onTabState(tab);
         }
 

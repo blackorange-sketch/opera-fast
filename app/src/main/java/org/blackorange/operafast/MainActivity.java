@@ -122,7 +122,11 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private int scrollAcc;
     private long barsFreeze;
     private FrameLayout topHolder, bottomHolder;
+    private TextView toolsBtn;
+    private android.widget.PopupWindow toolsPopup;
     private android.animation.ValueAnimator barsAnim;
+    private View contentView;
+    private int barsTh, barsBh;
     private float barsFrac;   // 0 = shown, 1 = hidden
     private boolean barsHidden;
     private LinearLayout loginBar;
@@ -166,6 +170,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         }
         PasswordStore.init(this);
         SitePerms.init(this);
+        Downloads.init(this);
         SiteSettings.init(this);
         int th = Settings.theme();
         boolean night = (getResources().getConfiguration().uiMode
@@ -323,6 +328,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
                 urlPill.setBackground(UI.rounded(
                         hasFocus ? UI.BG_INPUT_FOCUS : UI.BG_INPUT, dp(20)));
                 lockIcon.setVisibility(hasFocus ? View.GONE : lockIcon.getVisibility());
+                if (hasFocus) toolsBtn.setVisibility(View.GONE);
                 if (hasFocus) {
                     Tab t = shown;
                     urlField.setTextColor(UI.TEXT);
@@ -354,6 +360,15 @@ public class MainActivity extends Activity implements WebFactory.Host {
             }
         });
         urlPill.addView(reloadBtn, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        toolsBtn = UI.iconButton(this, UI.MORE_V, 20);
+        toolsBtn.setVisibility(View.GONE);
+        toolsBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showPageTools();
+            }
+        });
+        urlPill.addView(toolsBtn, new LinearLayout.LayoutParams(dp(36), dp(40)));
 
         top.addView(urlPill, new LinearLayout.LayoutParams(MATCH, dp(40)));
         topHolder = new FrameLayout(this);
@@ -434,6 +449,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
         // ---- middle: start page or WebView of the active tab
         FrameLayout content = new FrameLayout(this);
+        contentView = content;
         speedDial = new SpeedDialView(this, new SpeedDialView.Listener() {
             @Override
             public void onOpen(String url) {
@@ -880,6 +896,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         boolean secure = t != null && t.url != null && t.url.startsWith("https://");
         boolean plain = t != null && t.url != null && t.url.startsWith("http://");
         lockIcon.setVisibility(secure || plain ? View.VISIBLE : View.GONE);
+        toolsBtn.setVisibility(t != null && !t.isBlank() ? View.VISIBLE : View.GONE);
         lockIcon.setText(plain ? UI.LOCK_OPEN : UI.LOCK);
         lockIcon.setTextColor(plain ? UI.ORANGE : UI.TEXT_MUTED);
         if (!text.contentEquals(urlField.getText())) {
@@ -1025,6 +1042,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (in == null) return;
         if ((in.getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return;
         String action = in.getAction();
+        if ("org.blackorange.operafast.DOWNLOADS".equals(action)) {
+            if (show) showDownloads();
+            return;
+        }
         String target = null;
         if (Intent.ACTION_VIEW.equals(action)) {
             Uri d = in.getData();
@@ -1233,7 +1254,19 @@ public class MainActivity extends Activity implements WebFactory.Host {
             @Override
             public void onAction(int id) {
                 closeOverlay();
-                switch (id) {
+                runAction(id);
+            }
+
+            @Override
+            public void onDismiss() {
+                closeOverlay();
+            }
+        }), false);
+    }
+
+    /** Executes a menu / page-tools action by id. */
+    private void runAction(int id) {
+        switch (id) {
                     case MenuSheet.BOOKMARKS:
                         showBookmarks();
                         break;
@@ -1251,6 +1284,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
                         break;
                     case MenuSheet.QR:
                         showQr();
+                        break;
+                    case MenuSheet.COPY_LINK:
+                        copyLink();
                         break;
                     case MenuSheet.SHARE:
                         sharePage();
@@ -1286,13 +1322,6 @@ public class MainActivity extends Activity implements WebFactory.Host {
                     default:
                         break;
                 }
-            }
-
-            @Override
-            public void onDismiss() {
-                closeOverlay();
-            }
-        }), false);
     }
 
     private void applyDisplayPrefs(boolean reloadShown) {
@@ -1310,42 +1339,56 @@ public class MainActivity extends Activity implements WebFactory.Host {
         barsFreeze = System.currentTimeMillis() + 450;   // ignore the scroll jitter caused by resizing
         scrollAcc = 0;
         if (barsAnim != null) barsAnim.cancel();
-        final int th = topBar.getHeight() > 0 ? topBar.getHeight() : dp(52);
-        final int bh = bottomBar.getHeight() > 0 ? bottomBar.getHeight() : dp(52);
+        if (show && barsTh == 0) {
+            barsTh = topBar.getHeight();
+            barsBh = bottomBar.getHeight();
+        }
+        if (!show) {   // remember the real sizes while the bars are still laid out
+            if (topBar.getHeight() > 0) barsTh = topBar.getHeight();
+            if (bottomBar.getHeight() > 0) barsBh = bottomBar.getHeight();
+        }
+        if (barsTh == 0) barsTh = dp(52);
+        if (barsBh == 0) barsBh = dp(52);
+        // One relayout up front (page gets its final size), then only cheap GPU translations.
+        layoutBars(!show);
+        applyBars(barsFrac, !show);
+        final boolean hiding = !show;
         barsAnim = android.animation.ValueAnimator.ofFloat(barsFrac, show ? 0f : 1f);
-        barsAnim.setDuration(180);
+        barsAnim.setDuration(200);
         barsAnim.setInterpolator(new android.view.animation.DecelerateInterpolator());
         barsAnim.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
             @Override
             public void onAnimationUpdate(android.animation.ValueAnimator a) {
                 barsFrac = (Float) a.getAnimatedValue();
-                applyBars(th, bh);
-            }
-        });
-        barsAnim.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(android.animation.Animator a) {
-                if (barsFrac == 0f) {   // back to natural size
-                    topHolder.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
-                    bottomHolder.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
-                    topHolder.requestLayout();
-                }
+                applyBars(barsFrac, hiding);
             }
         });
         barsAnim.start();
     }
 
-    /** Collapses the holders and slides the bars inside them, so the page grows smoothly. */
-    private void applyBars(int th, int bh) {
-        int ch = Math.round(th * (1f - barsFrac));
-        int cb = Math.round(bh * (1f - barsFrac));
-        topHolder.getLayoutParams().height = ch;
-        bottomHolder.getLayoutParams().height = cb;
-        topBar.setTranslationY(-(th - ch));
-        bottomBar.setTranslationY(bh - cb);
-        topBar.setAlpha(1f - barsFrac * 0.6f);
-        bottomBar.setAlpha(1f - barsFrac * 0.6f);
+    /** hiddenLayout: bar holders take no space, so the page already has its final size. */
+    private void layoutBars(boolean hiddenLayout) {
+        int h = hiddenLayout ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
+        topHolder.getLayoutParams().height = h;
+        bottomHolder.getLayoutParams().height = h;
+        topHolder.setClipChildren(false);
+        bottomHolder.setClipChildren(false);
+        topHolder.setTranslationZ(dp(3));
+        bottomHolder.setTranslationZ(dp(3));
         topHolder.requestLayout();
+        bottomHolder.requestLayout();
+    }
+
+    /** f: 0 = bars shown, 1 = hidden. */
+    private void applyBars(float f, boolean hiddenLayout) {
+        topBar.setTranslationY(-barsTh * f);
+        if (hiddenLayout) {
+            bottomBar.setTranslationY(-barsBh * (1f - f));
+            contentView.setTranslationY(barsTh * (1f - f));
+        } else {
+            bottomBar.setTranslationY(barsBh * f);
+            contentView.setTranslationY(-barsTh * f);
+        }
     }
 
     @Override
@@ -2014,6 +2057,68 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (t != null && t.wv != null) t.wv.findNext(forward);
     }
 
+    private void copyLink() {
+        Tab t = shown;
+        if (t == null || t.isBlank()) return;
+        android.content.ClipboardManager cm =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("url", t.url));
+            toast(S.t("Link copied"));
+        }
+    }
+
+    /** Drop-down under the address bar with everything that acts on the current page. */
+    private void showPageTools() {
+        final Tab t = shown;
+        if (t == null || t.isBlank()) return;
+        if (toolsPopup != null) toolsPopup.dismiss();
+        boolean bookmarked = HistoryDb.get(this).isBookmarked(t.url);
+        Object[][] rows = {
+                {MenuSheet.BOOKMARK_PAGE, bookmarked ? UI.BOOKMARK : UI.BOOKMARK_BORDER,
+                        bookmarked ? "Remove bookmark" : "Add bookmark"},
+                {MenuSheet.SHARE, UI.SHARE, "Share page"},
+                {MenuSheet.COPY_LINK, UI.COPY, "Copy link"},
+                {MenuSheet.QR, UI.QR, "QR code"},
+                {MenuSheet.FIND, UI.FIND, "Find in page"},
+                {MenuSheet.READER, UI.READER, "Reader view"},
+                {MenuSheet.TRANSLATE, UI.TRANSLATE, "Translate page"},
+                {MenuSheet.TEXT_SIZE, UI.TEXT_FIELDS, "Text size"},
+                {MenuSheet.ADD_HOME, UI.HOME, "Add to home screen"},
+        };
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(0, dp(6), 0, dp(6));
+        for (final Object[] r : rows) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setBackground(UI.ripple());
+            row.setPadding(dp(14), 0, dp(18), 0);
+            row.addView(UI.icon(this, (String) r[1], 20, UI.BUTTON_ICON),
+                    new LinearLayout.LayoutParams(dp(30), MATCH));
+            TextView tv = UI.label(this, (String) r[2], 14, UI.TEXT);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(WRAP, WRAP);
+            lp.leftMargin = dp(10);
+            row.addView(tv, lp);
+            row.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (toolsPopup != null) toolsPopup.dismiss();
+                    runAction((Integer) r[0]);
+                }
+            });
+            col.addView(row, new LinearLayout.LayoutParams(MATCH, dp(46)));
+        }
+        ScrollView sv = new ScrollView(this);
+        sv.addView(col);
+        toolsPopup = new android.widget.PopupWindow(sv, dp(240), WRAP, true);
+        toolsPopup.setBackgroundDrawable(UI.rounded(UI.SHEET_BG, dp(16)));
+        toolsPopup.setElevation(dp(8));
+        toolsPopup.setOutsideTouchable(true);
+        toolsPopup.showAsDropDown(urlPill, urlPill.getWidth() - dp(240), dp(4));
+    }
+
     private void showQr() {
         Tab t = shown;
         if (t == null || t.isBlank()) return;
@@ -2266,8 +2371,18 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     @Override
-    public void onDownload(String url, String userAgent, String contentDisposition, String mime) {
+    public void onDownload(final Tab tab, String url, String userAgent, String contentDisposition,
+                           String mime) {
         startDownload(url, userAgent, contentDisposition, mime);
+        // a link that opened a new tab only to download leaves an empty page behind: close it
+        if (tab.openerId != null && tab.title.isEmpty()) {
+            screen.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (tabs.all().contains(tab)) closeTab(tab);
+                }
+            });
+        }
     }
 
     @Override

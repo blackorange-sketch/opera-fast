@@ -103,7 +103,7 @@ final class S {
         p("Search", "Пошук");
         p("Search suggestions", "Підказки пошукової системи");
         p("History and bookmarks in suggestions", "Історія й закладки в підказках");
-        p("Prefer cache", "Віддавати перевагу кешу (швидше, але сторінки можуть бути старішими)");
+        p("Prefer cache", "Спершу кеш, потім тихе оновлення (швидше відкриття)");
         p("Clear cache", "Очистити кеш");
         p("Cache cleared", "Кеш очищено");
         p("Saved login", "Збережений вхід");
@@ -132,6 +132,8 @@ final class S {
         p("Pink", "Рожевий");
         p("Accent color", "Колір акценту");
         p("Theme", "Тема");
+        p("Library", "Бібліотека");
+        p("More", "Інше");
         p("tap to retry", "торкніться, щоб повторити");
         p("QR code", "QR-код");
         p("The link is too long for a QR code", "Посилання завелике для QR-коду");

@@ -92,6 +92,10 @@ final class UI {
     static final String IMAGE = "";
     static final String UP = "";
     static final String DOWN = "";
+    static final String PAUSE = "\ue034";
+    static final String PLAY = "\ue037";
+    static final String MORE_V = "\ue5d4";
+    static final String COPY = "\ue14d";
     static final String QR = "\ue00a";
     static final String GLOBE = "";
 

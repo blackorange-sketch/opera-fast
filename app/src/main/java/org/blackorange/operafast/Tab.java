@@ -24,6 +24,8 @@ final class Tab {
     Bitmap favicon;
     Bitmap thumb;             // small screenshot for the tab switcher (taken when it opens)
     boolean loading;
+    long startedAt;           // when the current page load began (hybrid cache heuristic)
+    String revalidated;       // url that was already refreshed in the background
     int progress;
     long lastUsed;
     int crashes;              // renderer crashes since the user last loaded something here
