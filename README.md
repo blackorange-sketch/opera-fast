@@ -64,3 +64,7 @@ The APK is signed with the committed `android/debug.keystore`, so new builds upd
 - Ukrainian UI (Settings -> Language, default follows the system)
 - Settings: language, search engine, start page (speed dial or a custom address), editable speed dial (long-press a tile, "+" to add)
 - Address-bar suggestions: typed text, bookmarks, history and search-engine suggestions (toggle in Settings -> Search)
+
+## For launchers (DynamicAI)
+- Open a search: `Intent(ACTION_WEB_SEARCH).setPackage("org.blackorange.operafast").putExtra("query", q)`; open a page: `ACTION_VIEW` + https URI with the same package.
+- Search bookmarks/history: `content://org.blackorange.operafast.search/pages?q=text&limit=6` (columns `kind`, `title`, `url`). Needs the runtime permission `org.blackorange.operafast.permission.READ_PAGES` (the user is asked once).

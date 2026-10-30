@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="perm_read_pages">Search OperaFast bookmarks and history</string>
+    <string name="perm_read_pages_desc">Lets this app look up your OperaFast bookmarks and visited pages to show them in its search.</string>
+</resources>

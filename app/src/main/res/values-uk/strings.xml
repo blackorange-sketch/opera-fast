@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="perm_read_pages">Пошук у закладках та історії OperaFast</string>
+    <string name="perm_read_pages_desc">Дозволяє цій програмі шукати у ваших закладках і відвіданих сторінках OperaFast, щоб показувати їх у своєму пошуку.</string>
+</resources>

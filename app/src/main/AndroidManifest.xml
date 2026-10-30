@@ -7,6 +7,13 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- Lets another app (the DynamicAI launcher) search bookmarks and history, after the user allows it. -->
+    <permission
+        android:name="org.blackorange.operafast.permission.READ_PAGES"
+        android:description="@string/perm_read_pages_desc"
+        android:label="@string/perm_read_pages"
+        android:protectionLevel="dangerous" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -14,6 +21,12 @@
         android:label="OperaFast"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
+
+        <provider
+            android:name=".SearchProvider"
+            android:authorities="org.blackorange.operafast.search"
+            android:exported="true"
+            android:readPermission="org.blackorange.operafast.permission.READ_PAGES" />
 
         <activity
             android:name=".MainActivity"
