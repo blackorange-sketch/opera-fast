@@ -503,8 +503,20 @@ final class WebFactory {
                 }
             }
             if ((scheme.equals("http") || scheme.equals("https")) && req.isForMainFrame()
-                    && !req.isRedirect() && "GET".equals(req.getMethod())) {
-                go(view, u.toString());
+                    && !req.isRedirect() && "GET".equals(req.getMethod())
+                    && tab.openerId == null) {
+                final WebView wv0 = view;
+                final String target = u.toString();
+                view.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            go(wv0, target);
+                        } catch (Exception ignored) {
+                            // view may already be destroyed
+                        }
+                    }
+                });
                 return true;
             }
             if (scheme.equals("http") || scheme.equals("https") || scheme.equals("about")

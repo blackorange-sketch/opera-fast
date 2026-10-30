@@ -164,6 +164,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         super.onCreate(savedInstanceState);
         AdBlock.init(this);
         Settings.init(this);
+        installCrashLog();
         android.app.ActivityManager am =
                 (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
         if (am != null) {
@@ -2160,6 +2161,71 @@ public class MainActivity extends Activity implements WebFactory.Host {
             + "try{performance.getEntriesByType('resource').filter(function(e){return /jquery|\\.css|\\.js/i.test(e.name)}).slice(0,20).forEach(function(e){o.push('RES '+e.name+' st='+e.responseStatus+' size='+e.transferSize+' '+Math.round(e.duration)+'ms')});}catch(x){}"
             + "o.push('HEAD '+document.head.innerHTML.replace(/\\s+/g,' ').slice(0,1500));"
             + "return o.join('\\n')})()";
+
+    /** Keeps the stack of the last crash and offers to copy it on the next start. */
+    private void installCrashLog() {
+        final java.io.File f = new java.io.File(getFilesDir(), "crash.txt");
+        final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            @Override
+            public void uncaughtException(Thread t, Throwable e) {
+                try {
+                    java.io.StringWriter sw = new java.io.StringWriter();
+                    e.printStackTrace(new java.io.PrintWriter(sw));
+                    java.io.FileOutputStream o = new java.io.FileOutputStream(f);
+                    o.write(sw.toString().getBytes("UTF-8"));
+                    o.close();
+                } catch (Throwable ignored) {
+                    // nothing more to do
+                }
+                if (prev != null) prev.uncaughtException(t, e);
+            }
+        });
+        if (!f.exists()) return;
+        String s;
+        try {
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            byte[] b = new byte[(int) Math.min(f.length(), 6000)];
+            int n = in.read(b);
+            in.close();
+            s = new String(b, 0, Math.max(n, 0), "UTF-8");
+        } catch (Throwable e) {
+            s = "";
+        }
+        f.delete();
+        if (s.isEmpty()) return;
+        final String text = s;
+        new android.os.Handler(getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                TextView tv = new TextView(MainActivity.this);
+                tv.setText(text);
+                tv.setTextSize(10);
+                tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+                tv.setTextColor(UI.TEXT);
+                tv.setTextIsSelectable(true);
+                tv.setPadding(dp(16), dp(8), dp(16), dp(8));
+                ScrollView sv = new ScrollView(MainActivity.this);
+                sv.addView(tv);
+                new AlertDialog.Builder(MainActivity.this, UI.dialogTheme())
+                        .setTitle("Crash")
+                        .setView(sv)
+                        .setPositiveButton(S.t("Copy"), new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d, int w) {
+                                android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                                        getSystemService(CLIPBOARD_SERVICE);
+                                if (cm != null) {
+                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", text));
+                                    toast(S.t("Copied"));
+                                }
+                            }
+                        })
+                        .setNegativeButton(S.t("Close"), null)
+                        .show();
+            }
+        }, 1000);
+    }
 
     private void showIssues() {
         final Tab t = shown;
