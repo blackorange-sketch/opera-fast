@@ -306,6 +306,14 @@ final class SettingsView extends LinearLayout {
                         build();
                     }
                 });
+        row(S.t("Compatibility mode"), Settings.compat() ? S.t("On") : S.t("Off"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setCompat(!Settings.compat());
+                        build();
+                    }
+                });
         final LinearLayout cacheRow = row(S.t("Clear cache"), "…", new View.OnClickListener() {
             @Override
             public void onClick(View v) {

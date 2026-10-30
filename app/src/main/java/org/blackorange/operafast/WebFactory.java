@@ -495,6 +495,7 @@ final class WebFactory {
         @Override
         public void onPageCommitVisible(WebView view, String url) {
             // soft fade-in instead of a hard cut when the new page first paints
+            if (Settings.compat()) return;
             syncBackground(view, host);
             addBottomSpacer(view);
             view.setAlpha(0.55f);
@@ -532,10 +533,12 @@ final class WebFactory {
             if (tab.fallbackHttp != null && tab.url != null && tab.url.startsWith("https://")) {
                 tab.fallbackHttp = null; // the upgrade worked
             }
-            passwordHooks(view, tab, host);
-            syncBackground(view, host);
-            addBottomSpacer(view);
-            hybridRefresh(view);
+            if (!Settings.compat()) {
+                passwordHooks(view, tab, host);
+                syncBackground(view, host);
+                addBottomSpacer(view);
+                hybridRefresh(view);
+            }
             host.onTabState(tab);
         }
 

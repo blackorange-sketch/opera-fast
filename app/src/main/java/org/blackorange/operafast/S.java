@@ -103,6 +103,7 @@ final class S {
         p("Search", "Пошук");
         p("Search suggestions", "Підказки пошукової системи");
         p("History and bookmarks in suggestions", "Історія й закладки в підказках");
+        p("Compatibility mode", "Режим сумісності (без наших скриптів на сторінці)");
         p("Prefer cache", "Спершу кеш, потім тихе оновлення (швидше відкриття)");
         p("Clear cache", "Очистити кеш");
         p("Cache cleared", "Кеш очищено");

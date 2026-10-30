@@ -138,6 +138,14 @@ final class Settings {
         if (prefs != null) prefs.edit().putBoolean("cacheFirst", on).apply();
     }
 
+    static boolean compat() {
+        return prefs != null && prefs.getBoolean("compat", false);
+    }
+
+    static void setCompat(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("compat", on).apply();
+    }
+
     // ---- security / behaviour switches
 
     static boolean lockSensitive() {
