@@ -386,14 +386,12 @@ final class WebFactory {
 
     /** The bars float over the page: leave room at its start and end so nothing is hidden under them. */
     static void addBottomSpacer(WebView view) {
-        view.evaluateJavascript("(function(){var b=document.body||document.documentElement;"
-                + "document.documentElement.style.scrollPaddingTop='" + INSET_TOP + "px';"
-                + "if(!document.getElementById('__of_st')){var t=document.createElement('div');"
-                + "t.id='__of_st';t.style.cssText='height:" + INSET_TOP + "px;width:1px;pointer-events:none';"
-                + "b.insertBefore(t,b.firstChild)}"
-                + "if(!document.getElementById('__of_sp')){var d=document.createElement('div');"
-                + "d.id='__of_sp';d.style.cssText='height:" + INSET_BOTTOM + "px;width:1px;pointer-events:none';"
-                + "b.appendChild(d)}})()", null);
+        // CSS only: never insert elements into the page (that can break frameworks that
+        // hydrate the DOM and rules like body > :first-child)
+        view.evaluateJavascript("(function(){var h=document.documentElement;if(!h)return;"
+                + "var s=h.style;s.setProperty('padding-top','" + INSET_TOP + "px','important');"
+                + "s.setProperty('padding-bottom','" + INSET_BOTTOM + "px','important');"
+                + "s.setProperty('scroll-padding-top','" + INSET_TOP + "px')})()", null);
     }
 
     private static void hybridRefresh(WebView view) {
