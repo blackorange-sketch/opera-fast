@@ -741,6 +741,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     /** Screenshot of the visible page (small), for the tab switcher. Always calls done once. */
     private void captureThumb(final Tab t, final Runnable done) {
         if (t == null || t.wv == null || t.isBlank() || overlay != null
+                || android.os.SystemClock.uptimeMillis() < overlayClosingUntil
                 || webHost.getVisibility() != View.VISIBLE
                 || webHost.getWidth() <= 0 || webHost.getHeight() <= 0) {
             done.run();
@@ -1198,10 +1199,13 @@ public class MainActivity extends Activity implements WebFactory.Host {
         }
     }
 
+    private long overlayClosingUntil;
+
     private void closeOverlay() {
         final View v = overlay;
         if (v == null) return;
         overlay = null;
+        overlayClosingUntil = android.os.SystemClock.uptimeMillis() + 350;   // overlay is still fading out
         if (v == downloadSheet) downloadSheet = null;
         Runnable remove = new Runnable() {
             @Override

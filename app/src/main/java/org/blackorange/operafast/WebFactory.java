@@ -452,7 +452,11 @@ final class WebFactory {
                 if (!req.isForMainFrame()) {
                     Uri u = req.getUrl();
                     String pageHost = hostOf(tab.url);
-                    if (AdBlock.shouldBlock(u.getHost(), pageHost)) {
+                    // never block stylesheets: a blocked CSS file leaves the whole page unstyled
+                    String accept = req.getRequestHeaders() == null ? null
+                            : req.getRequestHeaders().get("Accept");
+                    boolean css = accept != null && accept.startsWith("text/css");
+                    if (!css && AdBlock.shouldBlock(u.getHost(), pageHost)) {
                         tab.blocked.incrementAndGet();
                         return new WebResourceResponse("text/plain", "utf-8",
                                 new ByteArrayInputStream(new byte[0]));
