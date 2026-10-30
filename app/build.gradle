@@ -4,6 +4,8 @@ plugins {
 
 // CI passes a growing VERSION_CODE so each build installs over the previous one.
 def vc = (System.getenv('VERSION_CODE') ?: '1').toInteger()
+// Own signing key (GitHub secrets). Without it the build falls back to the old committed key.
+def releaseKs = System.getenv('KEYSTORE_PATH')
 
 android {
     namespace 'org.blackorange.operafast'
@@ -25,6 +27,14 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (releaseKs) {
+            release {
+                storeFile file(releaseKs)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
@@ -35,7 +45,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug
+            signingConfig releaseKs ? signingConfigs.release : signingConfigs.debug
         }
     }
 

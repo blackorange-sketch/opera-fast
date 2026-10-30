@@ -26,6 +26,24 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Prepare signing key (if secrets are set)
+        env:
+          KS_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KS_KEYPASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD=$KS_PASS" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=$KS_ALIAS" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=$KS_KEYPASS" >> "$GITHUB_ENV"
+            echo "Using the release key from secrets"
+          else
+            echo "No release key secrets: using the committed fallback key"
+          fi
+
       - name: Build release APK
         run: |
           # Large offset so this build installs over the old Kivy builds as well.

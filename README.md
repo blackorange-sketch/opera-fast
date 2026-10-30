@@ -73,3 +73,10 @@ The APK is signed with the committed `android/debug.keystore`, so new builds upd
 - Swipe a card up/down in the tab switcher to close it; a single tap on any card or thumbnail opens that tab
 - More tabs kept alive on phones with enough memory; shorter tab-switch animation
 - Cache: pages open offline from the HTTP cache; optional "Prefer cache" mode; cache size and "Clear cache" in Settings
+
+## Update: security
+- Optional own signing key via GitHub secrets (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD); falls back to the old committed key if unset
+- Screen-lock check before Passwords and private tabs
+- Saved logins are filled on request ("Fill" pill), the save bridge accepts calls from the top frame only
+- HTTPS-only mode, certificate warning dialog, lock icon in the address bar
+- Camera / microphone / location prompts with remembered answers (Settings -> Reset site permissions)

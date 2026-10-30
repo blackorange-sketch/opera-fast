@@ -9,6 +9,8 @@ import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
+import android.webkit.GeolocationPermissions;
+import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -50,6 +52,18 @@ final class WebFactory {
 
         /** A login form was submitted (called on the main thread). */
         void onPasswordSubmit(Tab tab, String user, String pass);
+
+        /** A saved login exists for this page and it shows a password field. */
+        void onLoginAvailable(Tab tab, String user);
+
+        /** Main-frame certificate problem; the host must call handler.proceed() or cancel(). */
+        void onSslError(Tab tab, android.webkit.SslErrorHandler handler, android.net.http.SslError error);
+
+        /** A page asks for camera / microphone. */
+        void onSitePermission(Tab tab, android.webkit.PermissionRequest request);
+
+        /** A page asks for the location. */
+        void onGeoPrompt(Tab tab, String origin, android.webkit.GeolocationPermissions.Callback cb);
     }
 
     static WebView create(Context ctx, final Tab tab, final Host host) {
@@ -70,7 +84,6 @@ final class WebFactory {
         s.setMediaPlaybackRequiresUserGesture(true);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         applyUserAgent(wv, tab.desktop);
         applyDisplayPrefs(wv);
         s.setDatabaseEnabled(true);
@@ -126,7 +139,9 @@ final class WebFactory {
         }
 
         @android.webkit.JavascriptInterface
-        public void save(final String user, final String pass) {
+        public void save(String token, final String user, final String pass) {
+            // frames other than the top one never see the token, so they cannot fake a login
+            if (token == null || !token.equals(tab.bridgeToken)) return;
             if (pass == null || pass.isEmpty() || pass.length() > 256) return;
             final String u = user == null ? "" : user;
             new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
@@ -138,13 +153,18 @@ final class WebFactory {
         }
     }
 
-    private static final String CAPTURE_JS = "(function(){if(window.__ofp)return;window.__ofp=1;"
+    private static String captureJs(String token) {
+        return "(function(){if(window.__ofp)return;window.__ofp=1;var T='" + token + "';"
+                + CAPTURE_BODY;
+    }
+
+    private static final String CAPTURE_BODY = ""
             + "function grab(root){var ps=(root||document).querySelectorAll('input[type=password]');"
             + "var p=null;for(var i=0;i<ps.length;i++){if(ps[i].value){p=ps[i];break;}}if(!p)return;"
             + "var scope=p.form||document,ins=scope.querySelectorAll('input'),prev=null;"
             + "for(var j=0;j<ins.length;j++){if(ins[j]===p)break;var t=(ins[j].type||'text').toLowerCase();"
             + "if((t=='text'||t=='email'||t=='tel')&&ins[j].value)prev=ins[j];}"
-            + "try{OFPass.save(prev?prev.value:'',p.value);}catch(e){}}"
+            + "try{OFPass.save(T,prev?prev.value:'',p.value);}catch(e){}}"
             + "document.addEventListener('submit',function(e){grab(e.target)},true);"
             + "document.addEventListener('click',function(e){var t=e.target&&e.target.closest?"
             + "e.target.closest('button,input[type=submit]'):null;if(t&&t.type!='button'&&t.type!='reset')grab(document)},true);"
@@ -165,14 +185,60 @@ final class WebFactory {
                 + org.json.JSONObject.quote(user) + "," + org.json.JSONObject.quote(pass) + ");";
     }
 
-    /** Offers saved login for https pages and installs the form-submit watcher. */
-    private static void passwordHooks(WebView view, Tab tab) {
+    /** Installs the form-submit watcher and tells the host when a saved login fits this page. */
+    private static void passwordHooks(final WebView view, final Tab tab, final Host host) {
         if (tab.priv || !Settings.savePasswords()) return;
-        view.evaluateJavascript(CAPTURE_JS, null);
-        String url = tab.url;
+        tab.bridgeToken = Long.toHexString(new java.security.SecureRandom().nextLong())
+                + Long.toHexString(new java.security.SecureRandom().nextLong());
+        view.evaluateJavascript(captureJs(tab.bridgeToken), null);
+        final String url = tab.url;
         if (url == null || !url.startsWith("https://")) return;
-        PasswordStore.Item it = PasswordStore.find(hostOf(url), null);
+        final PasswordStore.Item it = PasswordStore.find(hostOf(url), null);
+        if (it == null || it.pass.isEmpty()) return;
+        pollForm(view, tab, host, it.user, url, 0);
+    }
+
+    /** Forms often appear after load; look a few times, then offer the saved login. */
+    private static void pollForm(final WebView view, final Tab tab, final Host host,
+                                 final String user, final String url, final int n) {
+        view.evaluateJavascript("!!document.querySelector('input[type=password]')",
+                new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String v) {
+                        if (!url.equals(tab.url)) return; // navigated away
+                        if ("true".equals(v)) {
+                            host.onLoginAvailable(tab, user);
+                        } else if (n < 6) {
+                            view.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    pollForm(view, tab, host, user, url, n + 1);
+                                }
+                            }, 700);
+                        }
+                    }
+                });
+    }
+
+    /** Fills the saved login into the page (called when the user taps "Fill"). */
+    static void fillLogin(WebView view, Tab tab) {
+        if (tab.priv || tab.url == null || !tab.url.startsWith("https://")) return;
+        PasswordStore.Item it = PasswordStore.find(hostOf(tab.url), null);
         if (it != null && !it.pass.isEmpty()) view.evaluateJavascript(fillJs(it.user, it.pass), null);
+    }
+
+    static boolean isLocalHost(String h) {
+        return h == null || h.equals("localhost") || h.endsWith(".local")
+                || h.matches("^\\d{1,3}(\\.\\d{1,3}){3}$");
+    }
+
+    /** HTTPS-only mode: the https:// twin of a plain http:// address, or null to leave it alone. */
+    static String upgrade(Tab tab, String url) {
+        if (!Settings.httpsOnly() || url == null || !url.startsWith("http://")) return null;
+        String h = hostOf(url);
+        if (isLocalHost(h) || h.equals(tab.noUpgradeHost)) return null;
+        tab.fallbackHttp = url;
+        return "https://" + url.substring(7);
     }
 
     /**
@@ -212,6 +278,8 @@ final class WebFactory {
     static void applyDisplayPrefs(WebView wv) {
         WebSettings s = wv.getSettings();
         s.setLoadsImagesAutomatically(!Settings.noImages());
+        s.setMixedContentMode(Settings.httpsOnly() ? WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                : WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         Object tag = wv.getTag();
         if (tag instanceof Tab && ((Tab) tag).priv) {
             s.setCacheMode(WebSettings.LOAD_NO_CACHE);
@@ -262,6 +330,13 @@ final class WebFactory {
             String scheme = u.getScheme();
             if (scheme == null) return false;
             scheme = scheme.toLowerCase(java.util.Locale.ROOT);
+            if (scheme.equals("http") && req.isForMainFrame()) {
+                String up = upgrade(tab, u.toString());
+                if (up != null) {
+                    view.loadUrl(up);
+                    return true;
+                }
+            }
             if (scheme.equals("http") || scheme.equals("https") || scheme.equals("about")
                     || scheme.equals("data") || scheme.equals("blob")
                     || scheme.equals("javascript") || scheme.equals("file")) {
@@ -290,7 +365,10 @@ final class WebFactory {
             String title = view.getTitle();
             if (title != null && !title.isEmpty()) tab.title = title;
             if (!tab.priv) HistoryDb.get(view.getContext()).visit(tab.url, tab.title);
-            passwordHooks(view, tab);
+            if (tab.fallbackHttp != null && tab.url != null && tab.url.startsWith("https://")) {
+                tab.fallbackHttp = null; // the upgrade worked
+            }
+            passwordHooks(view, tab, host);
             host.onTabState(tab);
         }
 
@@ -298,6 +376,30 @@ final class WebFactory {
         public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
             if (url != null) tab.url = url;
             host.onTabState(tab);
+        }
+
+        @Override
+        public void onReceivedError(WebView view, WebResourceRequest req,
+                                    android.webkit.WebResourceError err) {
+            if (req.isForMainFrame() && tab.fallbackHttp != null) {
+                // the https twin does not work: go back to plain http once, for this host
+                String http = tab.fallbackHttp;
+                tab.fallbackHttp = null;
+                tab.noUpgradeHost = hostOf(http);
+                view.loadUrl(http);
+            }
+        }
+
+        @Override
+        public void onReceivedSslError(WebView view, android.webkit.SslErrorHandler handler,
+                                       android.net.http.SslError error) {
+            String shown = tab.url == null ? "" : tab.url;
+            String failing = error.getUrl() == null ? "" : error.getUrl();
+            if (hostOf(shown) != null && hostOf(shown).equals(hostOf(failing))) {
+                host.onSslError(tab, handler, error);
+            } else {
+                handler.cancel();
+            }
         }
 
         @Override
@@ -345,6 +447,17 @@ final class WebFactory {
             transport.setWebView(nt.wv);
             resultMsg.sendToTarget();
             return true;
+        }
+
+        @Override
+        public void onPermissionRequest(PermissionRequest request) {
+            host.onSitePermission(tab, request);
+        }
+
+        @Override
+        public void onGeolocationPermissionsShowPrompt(String origin,
+                                                       GeolocationPermissions.Callback cb) {
+            host.onGeoPrompt(tab, origin, cb);
         }
 
         @Override

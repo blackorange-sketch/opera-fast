@@ -63,6 +63,8 @@ final class UI {
 
     static final String PRIVATE = "\ue8f5";
     static final String SETTINGS = "\ue8b8";
+    static final String LOCK = "\ue897";
+    static final String LOCK_OPEN = "\ue898";
     static final String SEARCH = "\ue8b6";
     static final String KEY = "\ue0da";
 

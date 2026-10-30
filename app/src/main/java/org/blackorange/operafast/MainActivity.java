@@ -61,6 +61,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private static final int REQ_FILE = 1;
     private static final int REQ_STORAGE = 2;
     private static final int REQ_NOTIF = 3;
+    private static final int REQ_AUTH = 4;
+    private static final int REQ_SITE = 5;
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT;
     private static final int WRAP = ViewGroup.LayoutParams.WRAP_CONTENT;
 
@@ -91,6 +93,15 @@ public class MainActivity extends Activity implements WebFactory.Host {
             java.util.concurrent.Executors.newSingleThreadExecutor();
     private LinearLayout bottomBar;
     private boolean passwordsFromSettings;
+    private TextView lockIcon;
+    private LinearLayout loginBar;
+    private TextView loginText;
+    private Runnable pendingAuth;
+    private long lastAuth;
+    private android.webkit.PermissionRequest pendingSiteReq;
+    private String[] pendingSiteGrant;
+    private String pendingGeoOrigin;
+    private android.webkit.GeolocationPermissions.Callback pendingGeoCb;
     private boolean pwPromptOpen;
     private View overlay;
     private LinearLayout findBar;
@@ -123,6 +134,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
                     : am.getMemoryClass() >= 256 ? 5 : 4;
         }
         PasswordStore.init(this);
+        SitePerms.init(this);
         PrivateData.wipe(this); // leftovers of a private session that was killed
 
         boolean restored = tabs.restore(
@@ -217,6 +229,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
             }
         });
         urlPill.addView(shieldBtn, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        lockIcon = UI.icon(this, UI.LOCK, 14, UI.TEXT_MUTED);
+        lockIcon.setVisibility(View.GONE);
+        urlPill.addView(lockIcon, new LinearLayout.LayoutParams(dp(18), dp(40)));
 
         urlField = new EditText(this);
         urlField.setBackground(null);
@@ -262,6 +277,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             public void onFocusChange(View v, boolean hasFocus) {
                 urlPill.setBackground(UI.rounded(
                         hasFocus ? UI.BG_INPUT_FOCUS : UI.BG_INPUT, dp(20)));
+                lockIcon.setVisibility(hasFocus ? View.GONE : lockIcon.getVisibility());
                 if (hasFocus) {
                     Tab t = shown;
                     urlField.setTextColor(UI.TEXT);
@@ -444,6 +460,43 @@ public class MainActivity extends Activity implements WebFactory.Host {
         rootLayout.addView(bottom, new LinearLayout.LayoutParams(MATCH, dp(52)));
 
         screen.addView(rootLayout, new FrameLayout.LayoutParams(MATCH, MATCH));
+
+        // "Fill saved login" pill above the bottom bar
+        loginBar = new LinearLayout(this);
+        loginBar.setOrientation(LinearLayout.HORIZONTAL);
+        loginBar.setGravity(Gravity.CENTER_VERTICAL);
+        loginBar.setBackground(UI.rounded(0xFF33303F, dp(24)));
+        loginBar.setElevation(dp(6));
+        loginBar.setPadding(dp(16), 0, dp(4), 0);
+        loginBar.setVisibility(View.GONE);
+        loginText = UI.label(this, "", 14, UI.TEXT);
+        loginBar.addView(loginText, new LinearLayout.LayoutParams(0, WRAP, 1f));
+        TextView fill = UI.label(this, "Fill", 14, UI.ACCENT);
+        fill.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        fill.setGravity(Gravity.CENTER);
+        fill.setBackground(UI.ripple());
+        fill.setClickable(true);
+        fill.setPadding(dp(14), 0, dp(14), 0);
+        fill.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Tab t = shown;
+                if (t != null && t.wv != null) WebFactory.fillLogin(t.wv, t);
+                hideLoginBar();
+            }
+        });
+        loginBar.addView(fill, new LinearLayout.LayoutParams(WRAP, MATCH));
+        TextView no = UI.iconButton(this, UI.CLOSE, 18);
+        no.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                hideLoginBar();
+            }
+        });
+        loginBar.addView(no, new LinearLayout.LayoutParams(dp(40), MATCH));
+        FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(MATCH, dp(48), Gravity.BOTTOM);
+        llp.setMargins(dp(12), 0, dp(12), dp(60));
+        screen.addView(loginBar, llp);
     }
 
     // ------------------------------------------------------------------ tabs
@@ -451,6 +504,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private void showTab(Tab t) {
         if (t == null) return;
         Tab prev = shown;
+        hideLoginBar();
         if (prev != null && prev != t) hideFindBar();
         if (prev != null && prev != t && prev.wv != null) {
             webHost.removeView(prev.wv);
@@ -500,6 +554,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private void loadUrl(Tab t, String url) {
         if (t == null || url == null) return;
         boolean had = t.wv != null;
+        String up = WebFactory.upgrade(t, url);
+        if (up != null) url = up;
         t.url = url;
         t.title = "";
         t.state = null;
@@ -516,6 +572,19 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     private void newTab(final boolean priv) {
+        if (priv && (shown == null || !shown.priv)) {
+            requireAuth(new Runnable() {
+                @Override
+                public void run() {
+                    openNewTab(true);
+                }
+            });
+            return;
+        }
+        openNewTab(priv);
+    }
+
+    private void openNewTab(final boolean priv) {
         // grab a preview of the page we are leaving, then open the new tab
         captureThumb(shown, new Runnable() {
             @Override
@@ -670,6 +739,11 @@ public class MainActivity extends Activity implements WebFactory.Host {
             text = UI.hostOf(t.url);
             if (t.url.startsWith("http://")) color = UI.ORANGE;
         }
+        boolean secure = t != null && t.url != null && t.url.startsWith("https://");
+        boolean plain = t != null && t.url != null && t.url.startsWith("http://");
+        lockIcon.setVisibility(secure || plain ? View.VISIBLE : View.GONE);
+        lockIcon.setText(plain ? UI.LOCK_OPEN : UI.LOCK);
+        lockIcon.setTextColor(plain ? UI.ORANGE : UI.TEXT_MUTED);
         if (!text.contentEquals(urlField.getText())) {
             programmatic = true;
             urlField.setText(text);
@@ -918,6 +992,11 @@ public class MainActivity extends Activity implements WebFactory.Host {
                             }
 
                             @Override
+                            public void onGate(Runnable proceed) {
+                                requireAuth(proceed);
+                            }
+
+                            @Override
                             public void onHistory() {
                                 showHistory();
                             }
@@ -1064,6 +1143,203 @@ public class MainActivity extends Activity implements WebFactory.Host {
             if (t.wv != null) WebFactory.applyDisplayPrefs(t.wv);
         }
         if (reloadShown) reloadActive();
+    }
+
+    // ------------------------------------------------------------------ security helpers
+
+    private void hideLoginBar() {
+        if (loginBar != null) loginBar.setVisibility(View.GONE);
+    }
+
+    @Override
+    public void onLoginAvailable(Tab tab, String user) {
+        if (tab != shown || tab.priv) return;
+        loginText.setText(S.t("Saved login") + (user.isEmpty() ? "" : ": " + user));
+        loginBar.setVisibility(View.VISIBLE);
+        loginBar.setAlpha(0f);
+        loginBar.animate().alpha(1f).setDuration(160).start();
+        ui.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                hideLoginBar();
+            }
+        }, 15000);
+    }
+
+    /** Asks for the phone's screen lock (PIN / pattern / fingerprint) before sensitive screens. */
+    private void requireAuth(Runnable action) {
+        if (!Settings.lockSensitive() || System.currentTimeMillis() - lastAuth < 60000) {
+            action.run();
+            return;
+        }
+        android.app.KeyguardManager km =
+                (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        Intent i = km != null && km.isDeviceSecure()
+                ? km.createConfirmDeviceCredentialIntent("OperaFast", S.t("Confirm it's you")) : null;
+        if (i == null) {
+            action.run();      // no screen lock set on the phone: nothing to ask
+            return;
+        }
+        pendingAuth = action;
+        try {
+            startActivityForResult(i, REQ_AUTH);
+        } catch (Exception e) {
+            pendingAuth = null;
+            action.run();
+        }
+    }
+
+    @Override
+    public void onSslError(Tab tab, final android.webkit.SslErrorHandler handler,
+                           android.net.http.SslError error) {
+        final String host = WebFactory.hostOf(tab.url);
+        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle(S.t("Connection is not private"))
+                .setMessage(host + "\n" + S.t("The site's security certificate cannot be trusted."))
+                .setPositiveButton(S.t("Go back"), new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        handler.cancel();
+                    }
+                })
+                .setNegativeButton(S.t("Proceed anyway"), new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        handler.proceed();
+                    }
+                })
+                .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                    @Override
+                    public void onCancel(android.content.DialogInterface d) {
+                        handler.cancel();
+                    }
+                })
+                .show();
+    }
+
+    @Override
+    public void onSitePermission(Tab tab, final android.webkit.PermissionRequest req) {
+        final String host = req.getOrigin() == null ? "" : req.getOrigin().getHost();
+        final java.util.ArrayList<String> ok = new java.util.ArrayList<String>();
+        boolean cam = false, mic = false;
+        for (String r : req.getResources()) {
+            if (r.equals(android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+                cam = true;
+                ok.add(r);
+            } else if (r.equals(android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                mic = true;
+                ok.add(r);
+            }
+        }
+        if (ok.isEmpty()) {
+            req.deny();
+            return;
+        }
+        final boolean wantCam = cam, wantMic = mic;
+        Boolean kc = wantCam ? SitePerms.get(host, SitePerms.CAMERA) : Boolean.TRUE;
+        Boolean kmic = wantMic ? SitePerms.get(host, SitePerms.MIC) : Boolean.TRUE;
+        Boolean known;
+        if (Boolean.FALSE.equals(kc) || Boolean.FALSE.equals(kmic)) known = Boolean.FALSE;
+        else if (kc == null || kmic == null) known = null;
+        else known = Boolean.TRUE;
+        if (known != null) {
+            if (known) grantSite(req, ok.toArray(new String[0]), wantCam, wantMic); else req.deny();
+            return;
+        }
+        String what = wantCam && wantMic ? S.t("camera and microphone")
+                : wantCam ? S.t("camera") : S.t("microphone");
+        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle(host)
+                .setMessage(S.t("Allow this site to use the") + " " + what + "?")
+                .setPositiveButton(S.t("Allow"), new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        if (wantCam) SitePerms.set(host, SitePerms.CAMERA, true);
+                        if (wantMic) SitePerms.set(host, SitePerms.MIC, true);
+                        grantSite(req, ok.toArray(new String[0]), wantCam, wantMic);
+                    }
+                })
+                .setNegativeButton(S.t("Deny"), new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        if (wantCam) SitePerms.set(host, SitePerms.CAMERA, false);
+                        if (wantMic) SitePerms.set(host, SitePerms.MIC, false);
+                        req.deny();
+                    }
+                })
+                .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                    @Override
+                    public void onCancel(android.content.DialogInterface d) {
+                        req.deny();
+                    }
+                })
+                .show();
+    }
+
+    /** Grants the web permission once Android's own camera / microphone permission is there. */
+    private void grantSite(android.webkit.PermissionRequest req, String[] res, boolean cam, boolean mic) {
+        java.util.ArrayList<String> need = new java.util.ArrayList<String>();
+        if (cam && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            need.add(Manifest.permission.CAMERA);
+        }
+        if (mic && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            need.add(Manifest.permission.RECORD_AUDIO);
+        }
+        if (need.isEmpty()) {
+            req.grant(res);
+            return;
+        }
+        if (pendingSiteReq != null) pendingSiteReq.deny();
+        pendingSiteReq = req;
+        pendingSiteGrant = res;
+        requestPermissions(need.toArray(new String[0]), REQ_SITE);
+    }
+
+    @Override
+    public void onGeoPrompt(Tab tab, final String origin,
+                            final android.webkit.GeolocationPermissions.Callback cb) {
+        final String host = WebFactory.hostOf(origin);
+        Boolean known = SitePerms.get(host, SitePerms.LOCATION);
+        if (known != null) {
+            if (known) grantGeo(origin, cb); else cb.invoke(origin, false, false);
+            return;
+        }
+        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle(host)
+                .setMessage(S.t("Allow this site to use your location?"))
+                .setPositiveButton(S.t("Allow"), new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        SitePerms.set(host, SitePerms.LOCATION, true);
+                        grantGeo(origin, cb);
+                    }
+                })
+                .setNegativeButton(S.t("Deny"), new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        SitePerms.set(host, SitePerms.LOCATION, false);
+                        cb.invoke(origin, false, false);
+                    }
+                })
+                .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                    @Override
+                    public void onCancel(android.content.DialogInterface d) {
+                        cb.invoke(origin, false, false);
+                    }
+                })
+                .show();
+    }
+
+    private void grantGeo(String origin, android.webkit.GeolocationPermissions.Callback cb) {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED) {
+            cb.invoke(origin, true, false);
+            return;
+        }
+        pendingGeoOrigin = origin;
+        pendingGeoCb = cb;
+        requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_SITE + 1);
     }
 
     // ------------------------------------------------------------------ address-bar suggestions
@@ -1235,6 +1511,15 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     private void showPasswords() {
+        requireAuth(new Runnable() {
+            @Override
+            public void run() {
+                openPasswords();
+            }
+        });
+    }
+
+    private void openPasswords() {
         showOverlay(new PasswordsView(this, new PasswordsView.Listener() {
             @Override
             public void onClose() {
@@ -1433,6 +1718,20 @@ public class MainActivity extends Activity implements WebFactory.Host {
             } else {
                 toast(S.t("Storage permission is needed to save files"));
             }
+        } else if (code == REQ_SITE) {
+            android.webkit.PermissionRequest r = pendingSiteReq;
+            pendingSiteReq = null;
+            if (r == null) return;
+            boolean all = results.length > 0;
+            for (int x : results) if (x != PackageManager.PERMISSION_GRANTED) all = false;
+            if (all) r.grant(pendingSiteGrant); else r.deny();
+        } else if (code == REQ_SITE + 1) {
+            android.webkit.GeolocationPermissions.Callback cb = pendingGeoCb;
+            pendingGeoCb = null;
+            if (cb == null) return;
+            boolean any = false;
+            for (int x : results) if (x == PackageManager.PERMISSION_GRANTED) any = true;
+            cb.invoke(pendingGeoOrigin, any, false);
         }
     }
 
@@ -1516,6 +1815,15 @@ public class MainActivity extends Activity implements WebFactory.Host {
                 fileCb.onReceiveValue(
                         WebChromeClient.FileChooserParams.parseResult(resultCode, data));
                 fileCb = null;
+            }
+            return;
+        }
+        if (requestCode == REQ_AUTH) {
+            Runnable r = pendingAuth;
+            pendingAuth = null;
+            if (r != null && resultCode == RESULT_OK) {
+                lastAuth = System.currentTimeMillis();
+                r.run();
             }
             return;
         }

@@ -31,6 +31,9 @@ final class TabSwitcherView extends FrameLayout {
 
         void onNew(boolean priv);
 
+        /** Runs {@code proceed} once the user has confirmed (private section). */
+        void onGate(Runnable proceed);
+
         void onDone();
 
         void onHistory();
@@ -106,9 +109,15 @@ final class TabSwitcherView extends FrameLayout {
                 @Override
                 public void onClick(View v) {
                     if (priv != forPrivate) {
-                        priv = forPrivate;
-                        index = -1;
-                        reload();
+                        Runnable go = new Runnable() {
+                            @Override
+                            public void run() {
+                                priv = forPrivate;
+                                index = -1;
+                                reload();
+                            }
+                        };
+                        if (forPrivate) listener.onGate(go); else go.run();
                     }
                 }
             });

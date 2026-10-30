@@ -13,6 +13,9 @@ final class Tab {
     volatile String url;
     String title = "";
     boolean desktop;
+    String bridgeToken;       // random per page: only the top frame knows it (login-save bridge)
+    String fallbackHttp;      // original http:// address if an https upgrade fails
+    String noUpgradeHost;     // host the user is allowed to load over plain http
     boolean priv;             // private tab: no history, no saved logins, not restored
     String openerId;          // tab that opened this one (back closes it and returns there)
 

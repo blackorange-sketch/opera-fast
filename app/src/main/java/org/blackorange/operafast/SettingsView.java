@@ -80,7 +80,9 @@ final class SettingsView extends LinearLayout {
         r.setBackground(UI.ripple());
         r.setClickable(true);
         r.setPadding(UI.dp(c, 16), UI.dp(c, 12), UI.dp(c, 16), UI.dp(c, 12));
-        r.addView(UI.label(c, title, 16, UI.TEXT));
+        TextView tt = UI.label(c, title, 16, UI.TEXT);
+        tt.setMaxLines(3);
+        r.addView(tt);
         if (value != null && !value.isEmpty()) {
             r.addView(UI.label(c, value, 13, UI.TEXT_MUTED));
         }
@@ -157,6 +159,30 @@ final class SettingsView extends LinearLayout {
                         build();
                     }
                 });
+        row(S.t("Ask for screen lock"), Settings.lockSensitive() ? S.t("On") : S.t("Off"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setLockSensitive(!Settings.lockSensitive());
+                        build();
+                    }
+                });
+        row(S.t("HTTPS-only mode"), Settings.httpsOnly() ? S.t("On") : S.t("Off"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setHttpsOnly(!Settings.httpsOnly());
+                        build();
+                    }
+                });
+        row(S.t("Reset site permissions"), null, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                SitePerms.clear();
+                android.widget.Toast.makeText(c, S.t("Site permissions reset"),
+                        android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
         row(S.t("Manage passwords"), null, new View.OnClickListener() {
             @Override
             public void onClick(View v) {

@@ -129,6 +129,48 @@ final class Settings {
         if (prefs != null) prefs.edit().putBoolean("cacheFirst", on).apply();
     }
 
+    // ---- security / behaviour switches
+
+    static boolean lockSensitive() {
+        return prefs == null || prefs.getBoolean("lock", true);
+    }
+
+    static void setLockSensitive(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("lock", on).apply();
+    }
+
+    static boolean httpsOnly() {
+        return prefs != null && prefs.getBoolean("httpsOnly", false);
+    }
+
+    static void setHttpsOnly(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("httpsOnly", on).apply();
+    }
+
+    static boolean hideBars() {
+        return prefs == null || prefs.getBoolean("hideBars", true);
+    }
+
+    static void setHideBars(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("hideBars", on).apply();
+    }
+
+    static boolean showTitle() {
+        return prefs != null && prefs.getBoolean("showTitle", false);
+    }
+
+    static void setShowTitle(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("showTitle", on).apply();
+    }
+
+    static int accent() {
+        return prefs == null ? 0 : prefs.getInt("accent", 0);
+    }
+
+    static void setAccent(int i) {
+        if (prefs != null) prefs.edit().putInt("accent", i).apply();
+    }
+
     // ---- passwords
 
     static boolean savePasswords() {
