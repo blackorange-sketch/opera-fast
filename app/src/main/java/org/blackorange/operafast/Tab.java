@@ -23,6 +23,7 @@ final class Tab {
     Bundle state;             // WebView back-forward state saved when wv was released
     Bitmap favicon;
     Bitmap thumb;             // small screenshot for the tab switcher (taken when it opens)
+    boolean pendingShow;      // popup/new-window tab loading in the background until it has content
     boolean loading;
     long startedAt;           // when the current page load began (hybrid cache heuristic)
     boolean selfReload;       // the next page start is our own refresh

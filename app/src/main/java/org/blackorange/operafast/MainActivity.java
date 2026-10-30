@@ -618,8 +618,14 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     // ------------------------------------------------------------------ tabs
 
+    private void showPending(Tab t) {
+        if (!t.pendingShow || !tabs.all().contains(t)) return;
+        showTab(t);
+    }
+
     private void showTab(Tab t) {
         if (t == null) return;
+        t.pendingShow = false;
         Tab prev = shown;
         hideLoginBar();
         setBars(true);
@@ -2294,12 +2300,14 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     @Override
     public void onTabState(Tab tab) {
+        if (tab.pendingShow && tab.progress >= 50) showPending(tab);
         if (tab == shown) syncBars();
         scheduleSave();
     }
 
     @Override
     public void onProgress(Tab tab, int p) {
+        if (tab.pendingShow && p >= 50) showPending(tab);
         if (tab != shown) return;
         progress.setProgress(tab.loading || p < 100 ? p : 100);
         updateShield();
@@ -2309,7 +2317,16 @@ public class MainActivity extends Activity implements WebFactory.Host {
     public Tab onOpenWindow(Tab opener) {
         Tab nt = tabs.add(null, opener, opener.priv);
         nt.wv = WebFactory.create(this, nt, this);
-        showTab(nt);
+        // load in the background: the current page stays on screen (no white flash) and the
+        // new tab is shown once it has content; a plain download never becomes visible at all
+        nt.pendingShow = true;
+        final Tab pending = nt;
+        ui.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                showPending(pending);
+            }
+        }, 6000);
         return nt;
     }
 
@@ -2422,7 +2439,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
             screen.post(new Runnable() {
                 @Override
                 public void run() {
-                    if (tabs.all().contains(tab)) closeTab(tab);
+                    if (tabs.all().contains(tab)) {
+                        tab.url = "";   // quiet close: no "tab closed" message for a download
+                        closeTab(tab);
+                    }
                 }
             });
         }
