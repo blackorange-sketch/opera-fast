@@ -2,6 +2,7 @@ package org.blackorange.operafast;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.net.Uri;
 import android.content.DialogInterface;
 import android.graphics.Typeface;
 import android.text.InputType;
@@ -30,6 +31,8 @@ final class SettingsView extends LinearLayout {
         void onClearCache();
 
         void onWallpaper(boolean pick);
+
+        void onPickFolder();
     }
 
     private final Listener listener;
@@ -195,10 +198,23 @@ final class SettingsView extends LinearLayout {
         });
 
         section(S.t("Downloads"));
-        row(S.t("Download folder"), "Download/" + Settings.dlFolder(), new View.OnClickListener() {
+        row(S.t("Download folder"), folderLabel(), new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                askFolder();
+                new AlertDialog.Builder(c, UI.dialogTheme())
+                        .setTitle(S.t("Download folder"))
+                        .setItems(new CharSequence[]{S.t("Choose folder"), S.t("Use Downloads")},
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface d, int which) {
+                                        if (which == 0) {
+                                            listener.onPickFolder();
+                                        } else {
+                                            Settings.setDlFolder("");
+                                            build();
+                                        }
+                                    }
+                                }).show();
             }
         });
 
@@ -402,30 +418,15 @@ final class SettingsView extends LinearLayout {
                         }).show();
     }
 
-    private void askFolder() {
-        final Context c = getContext();
-        final EditText in = new EditText(c);
-        in.setSingleLine(true);
-        in.setText(Settings.dlFolder());
-        in.setHint(S.t("Sub-folder name (empty = Download)"));
-        in.setTextColor(UI.TEXT);
-        in.setHintTextColor(UI.TEXT_MUTED);
-        LinearLayout box = new LinearLayout(c);
-        box.setPadding(UI.dp(c, 20), UI.dp(c, 8), UI.dp(c, 20), 0);
-        box.addView(in, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        new AlertDialog.Builder(c, UI.dialogTheme())
-                .setTitle(S.t("Download folder"))
-                .setView(box)
-                .setPositiveButton(S.t("OK"), new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface d, int w) {
-                        Settings.setDlFolder(in.getText().toString().trim());
-                        build();
-                    }
-                })
-                .setNegativeButton(S.t("Cancel"), null)
-                .show();
+    private String folderLabel() {
+        String f = Settings.dlFolder();
+        if (f.isEmpty()) return "Download";
+        try {
+            String id = android.provider.DocumentsContract.getTreeDocumentId(Uri.parse(f));
+            return id.indexOf(':') >= 0 ? id.substring(id.indexOf(':') + 1) : id;
+        } catch (Exception e) {
+            return f;
+        }
     }
 
     private void askAddress() {

@@ -64,6 +64,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private static final int REQ_AUTH = 4;
     private static final int REQ_SITE = 5;
     private static final int REQ_WALL = 7;
+    private static final int REQ_FOLDER = 8;
     private static final String READER_JS = ""
             + "(function(){"
             + "function txt(e){return (e.innerText||'').trim();}"
@@ -1908,6 +1909,18 @@ public class MainActivity extends Activity implements WebFactory.Host {
             }
 
             @Override
+            public void onPickFolder() {
+                try {
+                    startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), REQ_FOLDER);
+                } catch (Exception e) {
+                    toast(S.t("No file manager found"));
+                }
+            }
+
+            @Override
             public void onWallpaper(boolean pick) {
                 if (pick) {
                     pickWallpaper();
@@ -2344,6 +2357,22 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_FOLDER) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                Uri tree = data.getData();
+                try {
+                    getContentResolver().takePersistableUriPermission(tree,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    Settings.setDlFolder(tree.toString());
+                    toast(S.t("Download folder changed"));
+                    showSettings();
+                } catch (Exception e) {
+                    toast(S.t("Could not use this folder"));
+                }
+            }
+            return;
+        }
         if (requestCode == REQ_FILE) {
             if (fileCb != null) {
                 fileCb.onReceiveValue(

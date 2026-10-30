@@ -132,13 +132,17 @@ final class S {
         p("Pink", "Рожевий");
         p("Accent color", "Колір акценту");
         p("Theme", "Тема");
+        p("Choose folder", "Обрати папку");
+        p("Use Downloads", "Стандартна (Download)");
+        p("No file manager found", "Файловий менеджер не знайдено");
+        p("Download folder changed", "Папку завантажень змінено");
+        p("Could not use this folder", "Цю папку не вдалося використати");
         p("Library", "Бібліотека");
         p("More", "Інше");
         p("tap to retry", "торкніться, щоб повторити");
         p("QR code", "QR-код");
         p("The link is too long for a QR code", "Посилання завелике для QR-коду");
         p("Download folder", "Папка завантажень");
-        p("Sub-folder name (empty = Download)", "Назва підпапки (порожньо = Download)");
         p("Dark", "Темна");
         p("Light", "Світла");
         p("System default", "Як у системі");

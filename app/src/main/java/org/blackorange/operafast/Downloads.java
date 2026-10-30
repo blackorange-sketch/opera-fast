@@ -132,7 +132,7 @@ final class Downloads {
         it.name = name;
         it.mime = mime == null ? "" : mime;
         it.ua = userAgent;
-        it.folder = Settings.dlFolder().replaceAll("[^\\p{L}\\p{N} _.-]", "").trim();
+        it.folder = Settings.dlFolder();
         it.time = it.id;
         it.status = QUEUED;
         synchronized (Downloads.class) {
@@ -356,7 +356,34 @@ final class Downloads {
 
     private static void finish(final Item it, File part) throws Exception {
         String name = it.name;
-        String sub = it.folder == null || it.folder.isEmpty() ? "" : it.folder + "/";
+        boolean tree = it.folder != null && it.folder.startsWith("content:");
+        if (tree) {
+            try {
+                Uri t = Uri.parse(it.folder);
+                Uri dir = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                        t, android.provider.DocumentsContract.getTreeDocumentId(t));
+                String mime = it.mime == null || it.mime.isEmpty() ? "application/octet-stream" : it.mime;
+                Uri doc = android.provider.DocumentsContract.createDocument(
+                        app.getContentResolver(), dir, mime, name);
+                if (doc != null) {
+                    java.io.FileInputStream in = new java.io.FileInputStream(part);
+                    OutputStream out = app.getContentResolver().openOutputStream(doc);
+                    byte[] buf = new byte[64 * 1024];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                    out.close();
+                    in.close();
+                    it.saved = doc.toString();
+                    part.delete();
+                    it.done = it.total > 0 ? it.total : it.done;
+                    it.status = DONE;
+                    return;
+                }
+            } catch (Exception ignored) {
+                // folder gone or permission revoked: fall back to the Downloads folder
+            }
+        }
+        String sub = "";
         if (Build.VERSION.SDK_INT >= 29) {
             ContentResolver cr = app.getContentResolver();
             ContentValues v = new ContentValues();

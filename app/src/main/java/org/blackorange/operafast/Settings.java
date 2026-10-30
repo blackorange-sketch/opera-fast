@@ -101,7 +101,7 @@ final class Settings {
         if (prefs != null) prefs.edit().putString("home", u == null ? "" : u).apply();
     }
 
-    /** Sub-folder of Downloads/ used for new downloads ("" = Downloads itself). */
+    /** Tree URI (content://...) of the folder chosen for downloads; "" = the Downloads folder. */
     static String dlFolder() {
         return prefs == null ? "" : prefs.getString("dlFolder", "");
     }
