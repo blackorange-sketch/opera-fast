@@ -618,6 +618,12 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     // ------------------------------------------------------------------ tabs
 
+    /** A background tab becomes visible only once it has a title (= a real page, not a download). */
+    private boolean readyToShow(Tab t) {
+        boolean titled = t.title != null && !t.title.isEmpty();
+        return (t.progress >= 50 && titled) || (!t.loading && t.progress >= 100 && !t.isBlank());
+    }
+
     private void showPending(Tab t) {
         if (!t.pendingShow || !tabs.all().contains(t)) return;
         showTab(t);
@@ -2300,14 +2306,14 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     @Override
     public void onTabState(Tab tab) {
-        if (tab.pendingShow && tab.progress >= 50) showPending(tab);
+        if (tab.pendingShow && readyToShow(tab)) showPending(tab);
         if (tab == shown) syncBars();
         scheduleSave();
     }
 
     @Override
     public void onProgress(Tab tab, int p) {
-        if (tab.pendingShow && p >= 50) showPending(tab);
+        if (tab.pendingShow && readyToShow(tab)) showPending(tab);
         if (tab != shown) return;
         progress.setProgress(tab.loading || p < 100 ? p : 100);
         updateShield();
