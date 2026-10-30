@@ -66,6 +66,7 @@ final class TabSwitcherView extends FrameLayout {
     private int builtWidth = -1;
     private int step = 1;
     private int index = -1;
+    private long lastScrollChange;
     private int lastScrollX = Integer.MIN_VALUE;
 
     TabSwitcherView(Context c, TabManager tabs, float aspect, Listener listener) {
@@ -166,18 +167,51 @@ final class TabSwitcherView extends FrameLayout {
         carousel.setOnScrollChangeListener(new View.OnScrollChangeListener() {
             @Override
             public void onScrollChange(View v, int sx, int sy, int ox, int oy) {
+                lastScrollChange = android.os.SystemClock.uptimeMillis();
                 updateEffects(sx);
             }
         });
+        final int tapSlop = android.view.ViewConfiguration.get(c).getScaledTouchSlop();
         carousel.setOnTouchListener(new View.OnTouchListener() {
+            private float downX, downY;
+            private long downT;
+            private boolean wasMoving;
+
             @Override
             public boolean onTouch(View v, MotionEvent e) {
                 int a = e.getActionMasked();
                 if (a == MotionEvent.ACTION_DOWN) {
                     handler.removeCallbacks(snapCheck);
+                    downX = e.getX();
+                    downY = e.getY();
+                    downT = e.getEventTime();
+                    // the carousel is still flinging / snapping: the scroller will swallow this tap
+                    wasMoving = android.os.SystemClock.uptimeMillis() - lastScrollChange < 120;
                 } else if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
                     lastScrollX = Integer.MIN_VALUE;
                     handler.removeCallbacks(snapCheck);
+                    if (a == MotionEvent.ACTION_UP && wasMoving
+                            && Math.abs(e.getX() - downX) < tapSlop
+                            && Math.abs(e.getY() - downY) < tapSlop
+                            && e.getEventTime() - downT < 300) {
+                        // a tap during the animation still selects the card under the finger
+                        float cx = e.getX() + carousel.getScrollX() - cards.getLeft();
+                        View hit = null;
+                        float best = Float.MAX_VALUE;
+                        for (int i = 0; i < cards.getChildCount(); i++) {
+                            View ch = cards.getChildAt(i);
+                            float centre = (ch.getLeft() + ch.getRight()) / 2f;
+                            float dist = Math.abs(centre - cx);
+                            if (dist < ch.getWidth() / 2f && dist < best) {
+                                best = dist;
+                                hit = ch;
+                            }
+                        }
+                        if (hit != null) {
+                            hit.performClick();
+                            return true;
+                        }
+                    }
                     handler.postDelayed(snapCheck, 50);
                 }
                 return false;
@@ -392,6 +426,7 @@ final class TabSwitcherView extends FrameLayout {
         card.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                if (!v.isClickable()) return;   // already selected
                 // one tap, whichever card it is; the card swells and fades into the page
                 v.setClickable(false);
                 v.animate().scaleX(1.1f).scaleY(1.1f).alpha(0f).setDuration(120)
