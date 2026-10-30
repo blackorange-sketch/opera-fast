@@ -73,7 +73,7 @@ final class SpeedDialView extends ScrollView {
             TextView icon = UI.icon(c, UI.PRIVATE, 56, 0xFFC9B8FF);
             col.addView(icon, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            TextView title = UI.label(c, "Private tab", 22, UI.TEXT);
+            TextView title = UI.label(c, "Private tab", 22, 0xFFFFFFFF);
             title.setTypeface(Typeface.DEFAULT_BOLD);
             title.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(
@@ -82,7 +82,7 @@ final class SpeedDialView extends ScrollView {
             col.addView(title, tl);
             TextView note = UI.label(c, "Private tabs don't keep history or saved passwords. "
                     + "Cookies of the sites you visit are deleted when you close the last private tab.",
-                    14, UI.TEXT_MUTED);
+                    14, 0xFFA0A0A0);
             note.setMaxLines(8);
             note.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(

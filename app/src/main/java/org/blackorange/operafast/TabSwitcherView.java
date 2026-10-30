@@ -95,7 +95,7 @@ final class TabSwitcherView extends FrameLayout {
             LinearLayout box = new LinearLayout(c);
             box.setOrientation(LinearLayout.VERTICAL);
             box.setClickable(true);
-            TextView title = UI.label(c, forPrivate ? "Private" : "Tabs", 18, UI.TEXT);
+            TextView title = UI.label(c, forPrivate ? "Private" : "Tabs", 18, 0xFFFFFFFF);
             title.setTypeface(Typeface.DEFAULT_BOLD);
             box.addView(title, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -136,7 +136,7 @@ final class TabSwitcherView extends FrameLayout {
 
         View grow = new View(c);
         header.addView(grow, new LinearLayout.LayoutParams(0, 1, 1f));
-        countLabel = UI.label(c, "", 14, UI.TEXT_MUTED);
+        countLabel = UI.label(c, "", 14, 0xFFA0A0A0);
         header.addView(countLabel, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         column.addView(header, new LinearLayout.LayoutParams(
@@ -154,7 +154,7 @@ final class TabSwitcherView extends FrameLayout {
         carouselArea.addView(carousel, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER_VERTICAL));
-        emptyLabel = UI.label(c, "No tabs", 15, UI.TEXT_MUTED);
+        emptyLabel = UI.label(c, "No tabs", 15, 0xFFA0A0A0);
         emptyLabel.setGravity(Gravity.CENTER);
         emptyLabel.setVisibility(View.GONE);
         carouselArea.addView(emptyLabel, new FrameLayout.LayoutParams(
@@ -316,7 +316,7 @@ final class TabSwitcherView extends FrameLayout {
         } catch (Throwable e) {
             // never leave the screen blank without saying why
             cards.removeAllViews();
-            TextView err = UI.label(getContext(), String.valueOf(e), 12, UI.TEXT_MUTED);
+            TextView err = UI.label(getContext(), String.valueOf(e), 12, 0xFFA0A0A0);
             err.setMaxLines(8);
             err.setEllipsize(null);
             cards.addView(err, new LinearLayout.LayoutParams(w, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -329,7 +329,7 @@ final class TabSwitcherView extends FrameLayout {
         lastH = h;
         builtWidth = w;
         List<Tab> list = visible();
-        int bright = 0xFFFFFFFF, dim = UI.TEXT_MUTED;
+        int bright = 0xFFFFFFFF, dim = 0xFFA0A0A0;
         tabsTitle.setTextColor(priv ? dim : bright);
         privTitle.setTextColor(priv ? bright : dim);
         tabsLine.setVisibility(priv ? View.INVISIBLE : View.VISIBLE);
@@ -420,13 +420,13 @@ final class TabSwitcherView extends FrameLayout {
             String letter = tab.isBlank() || host.isEmpty() ? "+" : host.substring(0, 1).toUpperCase();
             TextView badge = new TextView(c);
             badge.setText(letter);
-            badge.setTextColor(UI.TEXT);
+            badge.setTextColor(0xFFFFFFFF);
             badge.setTextSize(12);
             badge.setTypeface(Typeface.DEFAULT_BOLD);
             badge.setGravity(Gravity.CENTER);
             GradientDrawable dot = new GradientDrawable();
             dot.setShape(GradientDrawable.OVAL);
-            dot.setColor(UI.BG_INPUT);
+            dot.setColor(0xFF3A3A3A);
             badge.setBackground(dot);
             top.addView(badge, new LinearLayout.LayoutParams(UI.dp(c, 22), UI.dp(c, 22)));
         }
@@ -435,7 +435,7 @@ final class TabSwitcherView extends FrameLayout {
 
         String name = tab.title != null && !tab.title.isEmpty() ? tab.title
                 : (tab.isBlank() ? "New tab" : host);
-        TextView title = UI.label(c, name, 14, UI.TEXT);
+        TextView title = UI.label(c, name, 14, 0xFFFFFFFF);
         top.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         final TextView x = UI.iconButton(c, UI.CLOSE, 20);
@@ -463,8 +463,8 @@ final class TabSwitcherView extends FrameLayout {
             LinearLayout ph = new LinearLayout(c);
             ph.setOrientation(LinearLayout.VERTICAL);
             ph.setGravity(Gravity.CENTER);
-            ph.addView(UI.icon(c, UI.GLOBE, 40, UI.TEXT_MUTED));
-            TextView t = UI.label(c, tab.isBlank() ? "Start page" : host, 13, UI.TEXT_MUTED);
+            ph.addView(UI.icon(c, UI.GLOBE, 40, 0xFFA0A0A0));
+            TextView t = UI.label(c, tab.isBlank() ? "Start page" : host, 13, 0xFFA0A0A0);
             t.setGravity(Gravity.CENTER);
             ph.addView(t, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -551,7 +551,7 @@ final class TabSwitcherView extends FrameLayout {
             f.addView(img, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         } else {
-            f.addView(UI.icon(c, UI.GLOBE, 16, UI.TEXT_MUTED), new FrameLayout.LayoutParams(
+            f.addView(UI.icon(c, UI.GLOBE, 16, 0xFFA0A0A0), new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
         f.setOnClickListener(new View.OnClickListener() {

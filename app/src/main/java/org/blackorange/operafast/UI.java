@@ -24,23 +24,50 @@ final class UI {
     private UI() {}
 
     // Opera-like dark palette
-    static final int BG_APP = 0xFF1A1A1A;
-    static final int BG_BAR = 0xFF252525;
-    static final int BG_INPUT = 0xFF3A3A3A;
-    static final int BG_INPUT_FOCUS = 0xFF4A4A4A;
-    static final int BG_CARD = 0xFF2E2E2E;
-    static final int TEXT = 0xFFFFFFFF;
-    static final int TEXT_MUTED = 0xFFA0A0A0;
+    static int BG_APP = 0xFF1A1A1A;
+    static int BG_BAR = 0xFF252525;
+    static int BG_INPUT = 0xFF3A3A3A;
+    static int BG_INPUT_FOCUS = 0xFF4A4A4A;
+    static int BG_CARD = 0xFF2E2E2E;
+    static int TEXT = 0xFFFFFFFF;
+    static int TEXT_MUTED = 0xFFA0A0A0;
     static int ACCENT = 0xFFFF1B2D;   // changed by applyAccent() at startup
     static final int[] ACCENTS = {0xFFFF1B2D, 0xFF3D8BFF, 0xFF2ECC71, 0xFFA66BFF, 0xFFFF9F1A, 0xFFFF4FA3};
     static final String[] ACCENT_NAMES = {"Red", "Blue", "Green", "Purple", "Orange", "Pink"};
+
+    static int SHEET_BG = 0xFF1E1E26, TILE_OFF = 0xFF2A2A33, BUTTON_ICON = 0xFFC9B8FF,
+            PRIV_BAR = 0xFF241B35, POP_BG = 0xFF33303F;
+    static boolean light;
+
+    /** Switches the shared palette; call before any view is built. */
+    static void applyTheme(boolean lightTheme) {
+        light = lightTheme;
+        if (lightTheme) {
+            BG_APP = 0xFFF4F4F6; BG_BAR = 0xFFFFFFFF; BG_INPUT = 0xFFE8E8EC;
+            BG_INPUT_FOCUS = 0xFFDADAE0; BG_CARD = 0xFFFFFFFF; TEXT = 0xFF1B1B1F;
+            TEXT_MUTED = 0xFF6B6B73; DIVIDER = 0xFFDDDDE2;
+            SHEET_BG = 0xFFFFFFFF; TILE_OFF = 0xFFEDEDF2; BUTTON_ICON = 0xFF5B3FC0;
+            PRIV_BAR = 0xFFE6DEF5; POP_BG = 0xFFE9E6F2;
+        } else {
+            BG_APP = 0xFF1A1A1A; BG_BAR = 0xFF252525; BG_INPUT = 0xFF3A3A3A;
+            BG_INPUT_FOCUS = 0xFF4A4A4A; BG_CARD = 0xFF2E2E2E; TEXT = 0xFFFFFFFF;
+            TEXT_MUTED = 0xFFA0A0A0; DIVIDER = 0xFF333333;
+            SHEET_BG = 0xFF1E1E26; TILE_OFF = 0xFF2A2A33; BUTTON_ICON = 0xFFC9B8FF;
+            PRIV_BAR = 0xFF241B35; POP_BG = 0xFF33303F;
+        }
+    }
+
+    static int dialogTheme() {
+        return light ? android.app.AlertDialog.THEME_DEVICE_DEFAULT_LIGHT
+                : android.app.AlertDialog.THEME_DEVICE_DEFAULT_DARK;
+    }
 
     static void applyAccent(int index) {
         ACCENT = ACCENTS[index >= 0 && index < ACCENTS.length ? index : 0];
     }
     static final int GREEN = 0xFF66FF66;
     static final int ORANGE = 0xFFFFA726;
-    static final int DIVIDER = 0xFF333333;
+    static int DIVIDER = 0xFF333333;
 
     // Material Icons codepoints (font is bundled in assets/fonts)
     static final String BACK = "";
@@ -65,6 +92,7 @@ final class UI {
     static final String IMAGE = "";
     static final String UP = "";
     static final String DOWN = "";
+    static final String QR = "\ue00a";
     static final String GLOBE = "";
 
     static final String PRIVATE = "\ue8f5";

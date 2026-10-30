@@ -99,6 +99,10 @@ final class DownloadsView extends LinearLayout {
         row.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                if (it.status == DownloadManager.STATUS_FAILED) {
+                    if (Downloads.retry(c, it)) reload();
+                    return;
+                }
                 if (it.status != DownloadManager.STATUS_SUCCESSFUL) return;
                 if (!Downloads.open(c, it)) {
                     Toast.makeText(c, S.t("No app can open this file"), Toast.LENGTH_SHORT).show();
@@ -132,7 +136,7 @@ final class DownloadsView extends LinearLayout {
         dialogOpen = true;
         boolean running = it.status != DownloadManager.STATUS_SUCCESSFUL
                 && it.status != DownloadManager.STATUS_FAILED;
-        new AlertDialog.Builder(c, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(c, UI.dialogTheme())
                 .setMessage(running ? S.t("Cancel this download?") : S.t("Delete") + " \"" + it.title + "\"?")
                 .setPositiveButton(running ? S.t("Cancel download") : S.t("Delete"),
                         new DialogInterface.OnClickListener() {

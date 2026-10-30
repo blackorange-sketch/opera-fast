@@ -39,6 +39,7 @@ final class MenuSheet extends FrameLayout {
     static final int TRANSLATE = 22;
     static final int ADD_HOME = 23;
     static final int TEXT_SIZE = 24;
+    static final int QR = 25;
 
     interface Listener {
         /** Flip the setting; return its new state. */
@@ -51,9 +52,6 @@ final class MenuSheet extends FrameLayout {
 
     private static final int TILE_ON_BG = 0xFFFFB3B8;
     private static final int TILE_ON_ICON = 0xFF5C0A14;
-    private static final int TILE_OFF_BG = 0xFF2A2A33;
-    private static final int BUTTON_BG = 0xFF2A2A33;
-    private static final int BUTTON_ICON = 0xFFC9B8FF;
 
     private final ScrollView sheet;
     private final TextView[] tileIcons = new TextView[4];
@@ -72,7 +70,7 @@ final class MenuSheet extends FrameLayout {
         });
 
         sheet = new ScrollView(c);
-        sheet.setBackground(UI.roundedTop(0xFF1E1E26, UI.dp(c, 26)));
+        sheet.setBackground(UI.roundedTop(UI.SHEET_BG, UI.dp(c, 26)));
         sheet.setClipToOutline(true);
         sheet.setClickable(true); // swallow taps so they do not reach the scrim
         sheet.setVerticalScrollBarEnabled(false);
@@ -120,7 +118,7 @@ final class MenuSheet extends FrameLayout {
                 button(c, SETTINGS, UI.SETTINGS, "Settings", true, listener));
         addButtons(c, body, listener,
                 button(c, CLEAR, UI.DELETE, "Clear data", true, listener),
-                null);
+                button(c, QR, UI.QR, "QR code", pageOpen, listener));
 
         sheet.addView(body, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -170,7 +168,7 @@ final class MenuSheet extends FrameLayout {
     }
 
     private void applyTile(Context c, int slot, boolean on) {
-        GradientDrawable bg = UI.rounded(on ? TILE_ON_BG : TILE_OFF_BG, UI.dp(c, 28));
+        GradientDrawable bg = UI.rounded(on ? TILE_ON_BG : UI.TILE_OFF, UI.dp(c, 28));
         tileIcons[slot].setBackground(bg);
         tileIcons[slot].setTextColor(on ? TILE_ON_ICON : UI.TEXT);
         tileSubs[slot].setText(S.t(on ? "On" : "Off"));
@@ -183,10 +181,10 @@ final class MenuSheet extends FrameLayout {
         LinearLayout b = new LinearLayout(c);
         b.setOrientation(LinearLayout.HORIZONTAL);
         b.setGravity(Gravity.CENTER_VERTICAL);
-        b.setBackground(UI.rounded(BUTTON_BG, UI.dp(c, 22)));
+        b.setBackground(UI.rounded(UI.TILE_OFF, UI.dp(c, 22)));
         b.setPadding(UI.dp(c, 16), 0, UI.dp(c, 12), 0);
 
-        b.addView(UI.icon(c, glyph, 22, BUTTON_ICON),
+        b.addView(UI.icon(c, glyph, 22, UI.BUTTON_ICON),
                 new LinearLayout.LayoutParams(UI.dp(c, 30), ViewGroup.LayoutParams.MATCH_PARENT));
         TextView t = UI.label(c, label, 14, UI.TEXT);
         t.setMaxLines(2);

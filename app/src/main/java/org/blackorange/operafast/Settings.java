@@ -101,6 +101,15 @@ final class Settings {
         if (prefs != null) prefs.edit().putString("home", u == null ? "" : u).apply();
     }
 
+    /** Sub-folder of Downloads/ used for new downloads ("" = Downloads itself). */
+    static String dlFolder() {
+        return prefs == null ? "" : prefs.getString("dlFolder", "");
+    }
+
+    static void setDlFolder(String f) {
+        if (prefs != null) prefs.edit().putString("dlFolder", f == null ? "" : f).apply();
+    }
+
     // ---- address-bar suggestions
 
     static boolean suggestNet() {
@@ -161,6 +170,15 @@ final class Settings {
 
     static void setShowTitle(boolean on) {
         if (prefs != null) prefs.edit().putBoolean("showTitle", on).apply();
+    }
+
+    /** 0 = dark, 1 = light, 2 = follow the system. */
+    static int theme() {
+        return prefs == null ? 0 : prefs.getInt("theme", 0);
+    }
+
+    static void setTheme(int i) {
+        if (prefs != null) prefs.edit().putInt("theme", i).apply();
     }
 
     static int accent() {

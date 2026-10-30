@@ -51,7 +51,7 @@ final class HistoryView extends LinearLayout {
         View.OnClickListener clearAll = new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                new AlertDialog.Builder(c, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                new AlertDialog.Builder(c, UI.dialogTheme())
                         .setMessage(S.t("Clear all browsing history?"))
                         .setPositiveButton(S.t("Clear"), new DialogInterface.OnClickListener() {
                             @Override

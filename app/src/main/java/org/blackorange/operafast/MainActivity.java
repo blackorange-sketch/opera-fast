@@ -121,6 +121,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private final java.util.ArrayList<String[]> closedTabs = new java.util.ArrayList<String[]>();
     private int scrollAcc;
     private long barsFreeze;
+    private FrameLayout topHolder, bottomHolder;
+    private android.animation.ValueAnimator barsAnim;
+    private float barsFrac;   // 0 = shown, 1 = hidden
     private boolean barsHidden;
     private LinearLayout loginBar;
     private TextView loginText;
@@ -164,7 +167,19 @@ public class MainActivity extends Activity implements WebFactory.Host {
         PasswordStore.init(this);
         SitePerms.init(this);
         SiteSettings.init(this);
+        int th = Settings.theme();
+        boolean night = (getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        UI.applyTheme(th == 1 || (th == 2 && !night));
+        getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(UI.BG_APP));
         UI.applyAccent(Settings.accent());
+        getWindow().setStatusBarColor(UI.BG_BAR);
+        getWindow().setNavigationBarColor(UI.BG_BAR);
+        if (UI.light && android.os.Build.VERSION.SDK_INT >= 26) {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        }
         PrivateData.wipe(this); // leftovers of a private session that was killed
 
         boolean restored = tabs.restore(
@@ -341,7 +356,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
         urlPill.addView(reloadBtn, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
         top.addView(urlPill, new LinearLayout.LayoutParams(MATCH, dp(40)));
-        rootLayout.addView(top, new LinearLayout.LayoutParams(MATCH, WRAP));
+        topHolder = new FrameLayout(this);
+        topHolder.addView(top, new FrameLayout.LayoutParams(MATCH, WRAP));
+        rootLayout.addView(topHolder, new LinearLayout.LayoutParams(MATCH, WRAP));
 
         progress = new UI.ProgressLine(this);
         rootLayout.addView(progress, new LinearLayout.LayoutParams(MATCH, dp(2)));
@@ -425,7 +442,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         });
         content.addView(speedDial, new FrameLayout.LayoutParams(MATCH, MATCH));
         pullSpinner = UI.icon(this, UI.REFRESH, 20, UI.TEXT);
-        pullSpinner.setBackground(UI.rounded(0xFF3A3A44, dp(20)));
+        pullSpinner.setBackground(UI.rounded(UI.POP_BG, dp(20)));
         pullSpinner.setElevation(dp(4));
         pullSpinner.setAlpha(0f);
         webHost = new PullLayout(this, pullSpinner, new PullLayout.Listener() {
@@ -498,7 +515,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
         for (View v : items) {
             bottom.addView(v, new LinearLayout.LayoutParams(0, MATCH, 1f));
         }
-        rootLayout.addView(bottom, new LinearLayout.LayoutParams(MATCH, dp(52)));
+        bottomHolder = new FrameLayout(this);
+        bottomHolder.addView(bottom, new FrameLayout.LayoutParams(MATCH, dp(52)));
+        rootLayout.addView(bottomHolder, new LinearLayout.LayoutParams(MATCH, WRAP));
 
         screen.addView(rootLayout, new FrameLayout.LayoutParams(MATCH, MATCH));
 
@@ -506,7 +525,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         loginBar = new LinearLayout(this);
         loginBar.setOrientation(LinearLayout.HORIZONTAL);
         loginBar.setGravity(Gravity.CENTER_VERTICAL);
-        loginBar.setBackground(UI.rounded(0xFF33303F, dp(24)));
+        loginBar.setBackground(UI.rounded(UI.POP_BG, dp(24)));
         loginBar.setElevation(dp(6));
         loginBar.setPadding(dp(16), 0, dp(4), 0);
         loginBar.setVisibility(View.GONE);
@@ -543,7 +562,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         snackBar = new LinearLayout(this);
         snackBar.setOrientation(LinearLayout.HORIZONTAL);
         snackBar.setGravity(Gravity.CENTER_VERTICAL);
-        snackBar.setBackground(UI.rounded(0xFF33303F, dp(24)));
+        snackBar.setBackground(UI.rounded(UI.POP_BG, dp(24)));
         snackBar.setElevation(dp(8));
         snackBar.setPadding(dp(18), 0, dp(4), 0);
         snackBar.setVisibility(View.GONE);
@@ -831,7 +850,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         fwdBtn.setAlpha(fwd ? 1f : 0.35f);
         reloadBtn.setText(t.loading ? UI.CLOSE : UI.REFRESH);
         tabCount.setCount(tabs.size());
-        int bar = t.priv ? 0xFF241B35 : UI.BG_BAR;
+        int bar = t.priv ? UI.PRIV_BAR : UI.BG_BAR;
         topBar.setBackgroundColor(bar);
         bottomBar.setBackgroundColor(bar);
         updateSecure();
@@ -889,7 +908,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         String msg = S.t("Blocked on this page: ") + t.blocked.get()
                 + "\n" + S.t("Blocked in total: ") + AdBlock.totalBlocked()
                 + "\n" + S.t("Rules loaded: ") + AdBlock.ruleCount();
-        AlertDialog.Builder b = new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        AlertDialog.Builder b = new AlertDialog.Builder(this, UI.dialogTheme())
                 .setTitle(S.t("Ad blocker"))
                 .setMessage(msg)
                 .setPositiveButton(S.t(AdBlock.isEnabled() ? "Turn off" : "Turn on"),
@@ -1230,6 +1249,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
                     case MenuSheet.FIND:
                         showFindBar();
                         break;
+                    case MenuSheet.QR:
+                        showQr();
+                        break;
                     case MenuSheet.SHARE:
                         sharePage();
                         break;
@@ -1285,10 +1307,45 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private void setBars(boolean show) {
         if (show != barsHidden) return;       // already in that state
         barsHidden = !show;
-        topBar.setVisibility(show ? View.VISIBLE : View.GONE);
-        bottomBar.setVisibility(show ? View.VISIBLE : View.GONE);
         barsFreeze = System.currentTimeMillis() + 450;   // ignore the scroll jitter caused by resizing
         scrollAcc = 0;
+        if (barsAnim != null) barsAnim.cancel();
+        final int th = topBar.getHeight() > 0 ? topBar.getHeight() : dp(52);
+        final int bh = bottomBar.getHeight() > 0 ? bottomBar.getHeight() : dp(52);
+        barsAnim = android.animation.ValueAnimator.ofFloat(barsFrac, show ? 0f : 1f);
+        barsAnim.setDuration(180);
+        barsAnim.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        barsAnim.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(android.animation.ValueAnimator a) {
+                barsFrac = (Float) a.getAnimatedValue();
+                applyBars(th, bh);
+            }
+        });
+        barsAnim.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator a) {
+                if (barsFrac == 0f) {   // back to natural size
+                    topHolder.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                    bottomHolder.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                    topHolder.requestLayout();
+                }
+            }
+        });
+        barsAnim.start();
+    }
+
+    /** Collapses the holders and slides the bars inside them, so the page grows smoothly. */
+    private void applyBars(int th, int bh) {
+        int ch = Math.round(th * (1f - barsFrac));
+        int cb = Math.round(bh * (1f - barsFrac));
+        topHolder.getLayoutParams().height = ch;
+        bottomHolder.getLayoutParams().height = cb;
+        topBar.setTranslationY(-(th - ch));
+        bottomBar.setTranslationY(bh - cb);
+        topBar.setAlpha(1f - barsFrac * 0.6f);
+        bottomBar.setAlpha(1f - barsFrac * 0.6f);
+        topHolder.requestLayout();
     }
 
     @Override
@@ -1352,7 +1409,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             names[i] = SiteSettings.ZOOMS[i] + "%";
             if (SiteSettings.ZOOMS[i] == cur) checked = i;
         }
-        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(this, UI.dialogTheme())
                 .setTitle(S.t("Text size") + " · " + host)
                 .setSingleChoiceItems(names, checked, new android.content.DialogInterface.OnClickListener() {
                     @Override
@@ -1377,7 +1434,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             String[] c = closedTabs.get(i);
             items[i] = c[1].isEmpty() ? UI.hostOf(c[0]) : c[1];
         }
-        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(this, UI.dialogTheme())
                 .setTitle(S.t("Recently closed"))
                 .setItems(items, new android.content.DialogInterface.OnClickListener() {
                     @Override
@@ -1514,7 +1571,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     public void onSslError(Tab tab, final android.webkit.SslErrorHandler handler,
                            android.net.http.SslError error) {
         final String host = WebFactory.hostOf(tab.url);
-        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(this, UI.dialogTheme())
                 .setTitle(S.t("Connection is not private"))
                 .setMessage(host + "\n" + S.t("The site's security certificate cannot be trusted."))
                 .setPositiveButton(S.t("Go back"), new android.content.DialogInterface.OnClickListener() {
@@ -1569,7 +1626,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         }
         String what = wantCam && wantMic ? S.t("camera and microphone")
                 : wantCam ? S.t("camera") : S.t("microphone");
-        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(this, UI.dialogTheme())
                 .setTitle(host)
                 .setMessage(S.t("Allow this site to use the") + " " + what + "?")
                 .setPositiveButton(S.t("Allow"), new android.content.DialogInterface.OnClickListener() {
@@ -1625,7 +1682,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             if (known) grantGeo(origin, cb); else cb.invoke(origin, false, false);
             return;
         }
-        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(this, UI.dialogTheme())
                 .setTitle(host)
                 .setMessage(S.t("Allow this site to use your location?"))
                 .setPositiveButton(S.t("Allow"), new android.content.DialogInterface.OnClickListener() {
@@ -1874,7 +1931,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (old != null && p.equals(old.pass)) return;
         final boolean update = old != null;
         pwPromptOpen = true;
-        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(this, UI.dialogTheme())
                 .setTitle(S.t(update ? "Update password?" : "Save password?"))
                 .setMessage(host + (u.isEmpty() ? "" : "\n" + u))
                 .setPositiveButton(S.t(update ? "Update" : "Save"),
@@ -1957,6 +2014,45 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (t != null && t.wv != null) t.wv.findNext(forward);
     }
 
+    private void showQr() {
+        Tab t = shown;
+        if (t == null || t.isBlank()) return;
+        QrCode q = QrCode.encode(t.url);
+        if (q == null) {
+            toast(S.t("The link is too long for a QR code"));
+            return;
+        }
+        int quiet = 3, px = 10, n = q.size + quiet * 2;
+        Bitmap bmp = Bitmap.createBitmap(n * px, n * px, Bitmap.Config.ARGB_8888);
+        bmp.eraseColor(0xFFFFFFFF);
+        for (int y = 0; y < q.size; y++) {
+            for (int x = 0; x < q.size; x++) {
+                if (!q.get(x, y)) continue;
+                for (int dy = 0; dy < px; dy++) {
+                    for (int dx = 0; dx < px; dx++) {
+                        bmp.setPixel((x + quiet) * px + dx, (y + quiet) * px + dy, 0xFF000000);
+                    }
+                }
+            }
+        }
+        android.widget.ImageView iv = new android.widget.ImageView(this);
+        iv.setImageBitmap(bmp);
+        iv.setAdjustViewBounds(true);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(12), dp(20), 0);
+        box.addView(iv, new LinearLayout.LayoutParams(MATCH, dp(280)));
+        TextView u = UI.label(this, t.url, 12, UI.TEXT_MUTED);
+        u.setMaxLines(2);
+        u.setGravity(Gravity.CENTER);
+        box.addView(u, new LinearLayout.LayoutParams(MATCH, WRAP));
+        new AlertDialog.Builder(this, UI.dialogTheme())
+                .setTitle(S.t("QR code"))
+                .setView(box)
+                .setPositiveButton(S.t("Close"), null)
+                .show();
+    }
+
     private void sharePage() {
         Tab t = shown;
         if (t == null || t.isBlank()) return;
@@ -1968,7 +2064,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     private void confirmClearData() {
-        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(this, UI.dialogTheme())
                 .setMessage(S.t("Clear history, cookies, site data and cache?"))
                 .setPositiveButton(S.t("Clear"), new android.content.DialogInterface.OnClickListener() {
                     @Override
@@ -2123,7 +2219,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
                 | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                : View.SYSTEM_UI_FLAG_VISIBLE);
+                : (UI.light && android.os.Build.VERSION.SDK_INT >= 26
+                ? View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+                : View.SYSTEM_UI_FLAG_VISIBLE));
     }
 
     @Override
@@ -2192,7 +2290,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     @Override
     public void onLinkLongPress(final Tab tab, final String url) {
-        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(this, UI.dialogTheme())
                 .setTitle(UI.hostOf(url))
                 .setItems(new CharSequence[]{S.t("Open in new tab"), S.t("Copy link"), S.t("Share link")},
                         new android.content.DialogInterface.OnClickListener() {

@@ -133,6 +133,12 @@ final class SettingsView extends LinearLayout {
                     }
                 });
 
+        row(S.t("Theme"), S.t(THEMES[Settings.theme() % 3]), new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pickTheme();
+            }
+        });
         row(S.t("Accent color"), S.t(UI.ACCENT_NAMES[Settings.accent() % UI.ACCENT_NAMES.length]),
                 new View.OnClickListener() {
                     @Override
@@ -188,11 +194,19 @@ final class SettingsView extends LinearLayout {
             }
         });
 
+        section(S.t("Downloads"));
+        row(S.t("Download folder"), "Download/" + Settings.dlFolder(), new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                askFolder();
+            }
+        });
+
         section(S.t("Home page"));
         row(S.t("Start page wallpaper"), null, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                new AlertDialog.Builder(c, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                new AlertDialog.Builder(c, UI.dialogTheme())
                         .setTitle(S.t("Start page wallpaper"))
                         .setItems(new CharSequence[]{S.t("Choose picture"), S.t("Remove")},
                                 new DialogInterface.OnClickListener() {
@@ -307,7 +321,7 @@ final class SettingsView extends LinearLayout {
         String[] names = {S.t("Automatic"), "English", "Українська"};
         int cur = 0;
         for (int i = 0; i < codes.length; i++) if (codes[i].equals(Settings.lang())) cur = i;
-        new AlertDialog.Builder(getContext(), AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(getContext(), UI.dialogTheme())
                 .setTitle(S.t("Language"))
                 .setSingleChoiceItems(names, cur, new DialogInterface.OnClickListener() {
                     @Override
@@ -320,10 +334,28 @@ final class SettingsView extends LinearLayout {
                 }).show();
     }
 
+    private static final String[] THEMES = {"Dark", "Light", "System default"};
+
+    private void pickTheme() {
+        String[] names = new String[3];
+        for (int i = 0; i < 3; i++) names[i] = S.t(THEMES[i]);
+        new AlertDialog.Builder(getContext(), UI.dialogTheme())
+                .setTitle(S.t("Theme"))
+                .setSingleChoiceItems(names, Settings.theme(), new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        d.dismiss();
+                        if (which == Settings.theme()) return;
+                        Settings.setTheme(which);
+                        listener.onLanguageChanged();   // rebuild everything with the new palette
+                    }
+                }).show();
+    }
+
     private void pickAccent() {
         String[] names = new String[UI.ACCENT_NAMES.length];
         for (int i = 0; i < names.length; i++) names[i] = S.t(UI.ACCENT_NAMES[i]);
-        new AlertDialog.Builder(getContext(), AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(getContext(), UI.dialogTheme())
                 .setTitle(S.t("Accent color"))
                 .setSingleChoiceItems(names, Settings.accent(), new DialogInterface.OnClickListener() {
                     @Override
@@ -337,7 +369,7 @@ final class SettingsView extends LinearLayout {
     }
 
     private void pickEngine() {
-        new AlertDialog.Builder(getContext(), AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(getContext(), UI.dialogTheme())
                 .setTitle(S.t("Search engine"))
                 .setSingleChoiceItems(Settings.ENGINE_NAMES, Settings.engine(),
                         new DialogInterface.OnClickListener() {
@@ -353,7 +385,7 @@ final class SettingsView extends LinearLayout {
     private void pickHome() {
         final Context c = getContext();
         String[] names = {S.t("Speed dial"), S.t("Custom address")};
-        new AlertDialog.Builder(c, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(c, UI.dialogTheme())
                 .setTitle(S.t("Start page"))
                 .setSingleChoiceItems(names, Settings.homeUrl().isEmpty() ? 0 : 1,
                         new DialogInterface.OnClickListener() {
@@ -370,6 +402,32 @@ final class SettingsView extends LinearLayout {
                         }).show();
     }
 
+    private void askFolder() {
+        final Context c = getContext();
+        final EditText in = new EditText(c);
+        in.setSingleLine(true);
+        in.setText(Settings.dlFolder());
+        in.setHint(S.t("Sub-folder name (empty = Download)"));
+        in.setTextColor(UI.TEXT);
+        in.setHintTextColor(UI.TEXT_MUTED);
+        LinearLayout box = new LinearLayout(c);
+        box.setPadding(UI.dp(c, 20), UI.dp(c, 8), UI.dp(c, 20), 0);
+        box.addView(in, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        new AlertDialog.Builder(c, UI.dialogTheme())
+                .setTitle(S.t("Download folder"))
+                .setView(box)
+                .setPositiveButton(S.t("OK"), new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        Settings.setDlFolder(in.getText().toString().trim());
+                        build();
+                    }
+                })
+                .setNegativeButton(S.t("Cancel"), null)
+                .show();
+    }
+
     private void askAddress() {
         final Context c = getContext();
         final EditText in = new EditText(c);
@@ -383,7 +441,7 @@ final class SettingsView extends LinearLayout {
         box.setPadding(UI.dp(c, 20), UI.dp(c, 8), UI.dp(c, 20), 0);
         box.addView(in, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        new AlertDialog.Builder(c, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(c, UI.dialogTheme())
                 .setTitle(S.t("Custom address"))
                 .setView(box)
                 .setPositiveButton(S.t("OK"), new DialogInterface.OnClickListener() {

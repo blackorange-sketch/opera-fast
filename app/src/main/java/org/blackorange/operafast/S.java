@@ -131,6 +131,15 @@ final class S {
         p("Orange", "Помаранчевий");
         p("Pink", "Рожевий");
         p("Accent color", "Колір акценту");
+        p("Theme", "Тема");
+        p("tap to retry", "торкніться, щоб повторити");
+        p("QR code", "QR-код");
+        p("The link is too long for a QR code", "Посилання завелике для QR-коду");
+        p("Download folder", "Папка завантажень");
+        p("Sub-folder name (empty = Download)", "Назва підпапки (порожньо = Download)");
+        p("Dark", "Темна");
+        p("Light", "Світла");
+        p("System default", "Як у системі");
         p("Hide bars while scrolling", "Ховати панелі під час прокручування");
         p("Show page title in address bar", "Показувати назву сторінки в адресному рядку");
         p("Update ad block list", "Оновити список блокування реклами");

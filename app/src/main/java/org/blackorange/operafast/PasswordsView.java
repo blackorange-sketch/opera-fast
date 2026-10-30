@@ -82,7 +82,7 @@ final class PasswordsView extends LinearLayout {
         final Context c = getContext();
         final PasswordStore.Item full = PasswordStore.find(shown.host, shown.user);
         final String pass = full == null ? "" : full.pass;
-        new AlertDialog.Builder(c, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        new AlertDialog.Builder(c, UI.dialogTheme())
                 .setTitle(shown.host)
                 .setMessage((shown.user.isEmpty() ? "" : shown.user + "\n") + pass)
                 .setPositiveButton(S.t("Copy password"), new DialogInterface.OnClickListener() {

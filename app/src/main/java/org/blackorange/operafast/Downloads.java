@@ -26,6 +26,7 @@ final class Downloads {
         long done;
         String mime;
         long modified;
+        String uri;
     }
 
     private static DownloadManager dm(Context c) {
@@ -45,9 +46,33 @@ final class Downloads {
         r.setTitle(name);
         r.setDescription(UI.hostOf(url));
         r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-        r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
+        r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, subPath(name));
         dm(c).enqueue(r);
         return name;
+    }
+
+    private static String subPath(String name) {
+        String f = Settings.dlFolder().replaceAll("[^\\p{L}\\p{N} _.-]", "").trim();
+        return f.isEmpty() ? name : f + "/" + name;
+    }
+
+    /** Starts the same download again (used for failed ones). */
+    static boolean retry(Context c, Item it) {
+        try {
+            if (it.uri == null) return false;
+            DownloadManager.Request r = new DownloadManager.Request(Uri.parse(it.uri));
+            String cookie = CookieManager.getInstance().getCookie(it.uri);
+            if (cookie != null) r.addRequestHeader("Cookie", cookie);
+            String name = it.title == null ? "download" : it.title;
+            r.setTitle(name);
+            r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, subPath(name));
+            dm(c).enqueue(r);
+            dm(c).remove(it.id);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     static List<Item> list(Context c) {
@@ -62,6 +87,7 @@ final class Downloads {
             int iTotal = cur.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES);
             int iDone = cur.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR);
             int iMime = cur.getColumnIndex(DownloadManager.COLUMN_MEDIA_TYPE);
+            int iUri = cur.getColumnIndex(DownloadManager.COLUMN_URI);
             int iMod = cur.getColumnIndex(DownloadManager.COLUMN_LAST_MODIFIED_TIMESTAMP);
             while (cur.moveToNext()) {
                 Item it = new Item();
@@ -72,6 +98,7 @@ final class Downloads {
                 it.done = cur.getLong(iDone);
                 it.mime = cur.getString(iMime);
                 it.modified = cur.getLong(iMod);
+                it.uri = iUri >= 0 ? cur.getString(iUri) : null;
                 out.add(it);
             }
         } catch (Exception ignored) {
@@ -114,7 +141,7 @@ final class Downloads {
             case DownloadManager.STATUS_SUCCESSFUL:
                 return S.t("Completed") + (it.total > 0 ? " · " + size(it.total) : "");
             case DownloadManager.STATUS_FAILED:
-                return S.t("Failed");
+                return S.t("Failed") + " · " + S.t("tap to retry");
             case DownloadManager.STATUS_PAUSED:
                 return S.t("Paused");
             case DownloadManager.STATUS_PENDING:
