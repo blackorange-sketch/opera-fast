@@ -170,6 +170,32 @@ final class HistoryDb extends SQLiteOpenHelper {
         return out;
     }
 
+    /** Pages whose address or title contains the text, most visited first. */
+    List<Entry> search(String q, int limit) {
+        List<Entry> out = new ArrayList<Entry>();
+        Cursor c = null;
+        try {
+            String like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+            c = getReadableDatabase().rawQuery(
+                    "SELECT _id,url,title,last_visit FROM history "
+                            + "WHERE url LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' "
+                            + "ORDER BY visits DESC, last_visit DESC LIMIT " + limit,
+                    new String[]{like, like});
+            while (c.moveToNext()) {
+                Entry e = new Entry();
+                e.id = c.getLong(0);
+                e.url = c.getString(1);
+                e.title = c.getString(2);
+                e.time = c.getLong(3);
+                out.add(e);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        return out;
+    }
+
     void delete(final long id) {
         IO.execute(new Runnable() {
             @Override

@@ -101,6 +101,24 @@ final class Settings {
         if (prefs != null) prefs.edit().putString("home", u == null ? "" : u).apply();
     }
 
+    // ---- address-bar suggestions
+
+    static boolean suggestNet() {
+        return prefs == null || prefs.getBoolean("sugNet", true);
+    }
+
+    static void setSuggestNet(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("sugNet", on).apply();
+    }
+
+    static boolean suggestLocal() {
+        return prefs == null || prefs.getBoolean("sugLocal", true);
+    }
+
+    static void setSuggestLocal(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("sugLocal", on).apply();
+    }
+
     // ---- passwords
 
     static boolean savePasswords() {

@@ -99,6 +99,24 @@ final class SettingsView extends LinearLayout {
                     }
                 });
 
+        section(S.t("Search"));
+        row(S.t("Search suggestions"), Settings.suggestNet() ? S.t("On") : S.t("Off"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setSuggestNet(!Settings.suggestNet());
+                        build();
+                    }
+                });
+        row(S.t("History and bookmarks in suggestions"),
+                Settings.suggestLocal() ? S.t("On") : S.t("Off"), new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setSuggestLocal(!Settings.suggestLocal());
+                        build();
+                    }
+                });
+
         section(S.t("Home page"));
         String home = Settings.homeUrl();
         row(S.t("Start page"), home.isEmpty() ? S.t("Speed dial") : home,

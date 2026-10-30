@@ -63,3 +63,4 @@ The APK is signed with the committed `android/debug.keystore`, so new builds upd
 - Private tabs (separate "Private" section in the tab switcher): no history, no saved logins, not restored; cookies of visited sites are removed when the last private tab closes. Screenshots are blocked while one is open.
 - Ukrainian UI (Settings -> Language, default follows the system)
 - Settings: language, search engine, start page (speed dial or a custom address), editable speed dial (long-press a tile, "+" to add)
+- Address-bar suggestions: typed text, bookmarks, history and search-engine suggestions (toggle in Settings -> Search)

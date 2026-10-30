@@ -37,6 +37,7 @@ import android.webkit.WebView;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -82,6 +83,12 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private UI.ProgressLine progress;
 
     private LinearLayout topBar;
+    private ScrollView suggestScroll;
+    private LinearLayout suggestList;
+    private boolean programmatic;
+    private int suggestGen;
+    private final java.util.concurrent.ExecutorService netIo =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
     private LinearLayout bottomBar;
     private boolean passwordsFromSettings;
     private boolean pwPromptOpen;
@@ -217,6 +224,21 @@ public class MainActivity extends Activity implements WebFactory.Host {
         urlField.setSingleLine(true);
         urlField.setImeOptions(EditorInfo.IME_ACTION_GO | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
         urlField.setSelectAllOnFocus(true);
+        urlField.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int st, int c, int a) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int st, int b, int c) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable e) {
+                if (programmatic || !urlField.hasFocus()) return;
+                showSuggestions(e.toString().trim());
+            }
+        });
         urlField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent ev) {
@@ -237,9 +259,12 @@ public class MainActivity extends Activity implements WebFactory.Host {
                 if (hasFocus) {
                     Tab t = shown;
                     urlField.setTextColor(UI.TEXT);
+                    programmatic = true;
                     urlField.setText(t == null || t.isBlank() ? "" : t.url);
+                    programmatic = false;
                     urlField.selectAll();
                 } else {
+                    hideSuggestions();
                     hideKeyboard();
                     updateUrlField();
                 }
@@ -344,6 +369,14 @@ public class MainActivity extends Activity implements WebFactory.Host {
         content.addView(speedDial, new FrameLayout.LayoutParams(MATCH, MATCH));
         webHost = new FrameLayout(this);
         content.addView(webHost, new FrameLayout.LayoutParams(MATCH, MATCH));
+        suggestScroll = new ScrollView(this);
+        suggestScroll.setBackgroundColor(UI.BG_APP);
+        suggestScroll.setVisibility(View.GONE);
+        suggestScroll.setKeepScreenOn(false);
+        suggestList = new LinearLayout(this);
+        suggestList.setOrientation(LinearLayout.VERTICAL);
+        suggestScroll.addView(suggestList, new ScrollView.LayoutParams(MATCH, WRAP));
+        content.addView(suggestScroll, new FrameLayout.LayoutParams(MATCH, MATCH));
         rootLayout.addView(content, new LinearLayout.LayoutParams(MATCH, 0, 1f));
 
         // ---- bottom: back / forward / new tab / tabs / menu
@@ -623,7 +656,11 @@ public class MainActivity extends Activity implements WebFactory.Host {
             text = UI.hostOf(t.url);
             if (t.url.startsWith("http://")) color = UI.ORANGE;
         }
-        if (!text.contentEquals(urlField.getText())) urlField.setText(text);
+        if (!text.contentEquals(urlField.getText())) {
+            programmatic = true;
+            urlField.setText(text);
+            programmatic = false;
+        }
         urlField.setTextColor(color);
     }
 
@@ -684,6 +721,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     private void clearUrlFocus() {
+        hideSuggestions();
         urlField.clearFocus();
         rootLayout.requestFocus();
     }
@@ -1009,6 +1047,116 @@ public class MainActivity extends Activity implements WebFactory.Host {
             if (t.wv != null) WebFactory.applyDisplayPrefs(t.wv);
         }
         if (reloadShown) reloadActive();
+    }
+
+    // ------------------------------------------------------------------ address-bar suggestions
+
+    private void hideSuggestions() {
+        suggestGen++;
+        suggestScroll.setVisibility(View.GONE);
+        suggestList.removeAllViews();
+    }
+
+    private void showSuggestions(final String q) {
+        final int gen = ++suggestGen;
+        if (q.isEmpty()) {
+            suggestScroll.setVisibility(View.GONE);
+            suggestList.removeAllViews();
+            return;
+        }
+        render(q, null);
+        if (Settings.suggestNet() && !q.startsWith("http") && q.length() > 1) {
+            ui.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (gen != suggestGen) return;
+                    netIo.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (gen != suggestGen) return;
+                            final java.util.List<String> res = Suggest.fetch(q);
+                            ui.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (gen == suggestGen && urlField.hasFocus()) render(q, res);
+                                }
+                            });
+                        }
+                    });
+                }
+            }, 150);
+        }
+    }
+
+    private void render(String q, java.util.List<String> net) {
+        suggestList.removeAllViews();
+        // 1) what was typed (opens it as an address or a search)
+        addSuggestion(UI.SEARCH, q, q, q);
+        // 2) matching bookmarks and history
+        if (Settings.suggestLocal()) {
+            java.util.HashSet<String> seen = new java.util.HashSet<String>();
+            String low = q.toLowerCase(Locale.ROOT);
+            int n = 0;
+            for (HistoryDb.Entry e : HistoryDb.get(this).bookmarks()) {
+                String t = e.title == null ? "" : e.title;
+                if (n < 3 && (e.url.toLowerCase(Locale.ROOT).contains(low)
+                        || t.toLowerCase(Locale.ROOT).contains(low)) && seen.add(e.url)) {
+                    addSuggestion(UI.BOOKMARK, t.isEmpty() ? UI.hostOf(e.url) : t, e.url, e.url);
+                    n++;
+                }
+            }
+            for (HistoryDb.Entry e : HistoryDb.get(this).search(q, 4)) {
+                if (seen.add(e.url)) {
+                    String t = e.title == null ? "" : e.title;
+                    addSuggestion(UI.HISTORY, t.isEmpty() ? UI.hostOf(e.url) : t, e.url, e.url);
+                }
+            }
+        }
+        // 3) the search engine's own suggestions
+        if (net != null) {
+            for (String sgs : net) {
+                if (!sgs.equalsIgnoreCase(q)) addSuggestion(UI.SEARCH, sgs, sgs, sgs);
+            }
+        }
+        suggestScroll.setVisibility(View.VISIBLE);
+        suggestScroll.scrollTo(0, 0);
+    }
+
+    /** One row; tapping loads {@code target}, the arrow copies {@code fill} into the field. */
+    private void addSuggestion(String glyph, String text, final String target, final String fill) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackground(UI.ripple());
+        row.setClickable(true);
+        row.setPadding(dp(14), 0, dp(4), 0);
+        row.addView(UI.icon(this, glyph, 20, UI.TEXT_MUTED),
+                new LinearLayout.LayoutParams(dp(28), MATCH));
+        TextView t = UI.label(this, text, 15, UI.TEXT);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, WRAP, 1f);
+        lp.leftMargin = dp(12);
+        row.addView(t, lp);
+        TextView fillBtn = UI.iconButton(this, UI.UP, 20);
+        fillBtn.setRotation(-45f);
+        fillBtn.setTextColor(UI.TEXT_MUTED);
+        fillBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                programmatic = true;
+                urlField.setText(fill + (fill.startsWith("http") ? "" : " "));
+                programmatic = false;
+                urlField.setSelection(urlField.getText().length());
+                showSuggestions(urlField.getText().toString().trim());
+            }
+        });
+        row.addView(fillBtn, new LinearLayout.LayoutParams(dp(44), dp(48)));
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                navigate(target);
+            }
+        });
+        suggestList.addView(row, new LinearLayout.LayoutParams(MATCH, dp(48)));
     }
 
     private void showSettings() {

@@ -100,6 +100,9 @@ final class S {
         p("Manage passwords", "Керування паролями");
         p("(no username)", "(без імені)");
         // settings
+        p("Search", "Пошук");
+        p("Search suggestions", "Підказки пошукової системи");
+        p("History and bookmarks in suggestions", "Історія й закладки в підказках");
         p("Language", "Мова");
         p("Automatic", "Автоматично");
         p("Search engine", "Пошукова система");
