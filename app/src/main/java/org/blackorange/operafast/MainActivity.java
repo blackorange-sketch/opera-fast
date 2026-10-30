@@ -674,9 +674,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (t.state != null) {
             Bundle st = t.state;
             t.state = null;
-            if (t.wv.restoreState(st) == null && !t.isBlank()) t.wv.loadUrl(t.url);
+            if (t.wv.restoreState(st) == null && !t.isBlank()) WebFactory.go(t.wv, t.url);
         } else if (!t.isBlank()) {
-            t.wv.loadUrl(t.url);
+            WebFactory.go(t.wv, t.url);
         }
     }
 
@@ -693,7 +693,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         showTab(t);               // creates the WebView and loads t.url if there was none
         if (had) {
             WebFactory.applyDisplayPrefs(t.wv);
-            t.wv.loadUrl(url);
+            WebFactory.go(t.wv, url);
         }
     }
 
@@ -1345,7 +1345,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
                         SiteSettings.setDesktop(WebFactory.hostOf(t.url), t.desktop);
                         if (t.wv != null) {
                             WebFactory.applyUserAgent(t.wv, t.desktop);
-                            t.wv.reload();
+                            WebFactory.again(t.wv);
                         }
                         scheduleSave();
                         return t.desktop;

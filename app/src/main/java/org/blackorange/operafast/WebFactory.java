@@ -260,6 +260,26 @@ final class WebFactory {
     }
 
     /**
+     * WebView adds "X-Requested-With: <package>" to every request. Some servers take that for an
+     * AJAX call and answer with a bare page fragment (no head, no scripts). An empty value in the
+     * extra headers replaces it for the navigation itself.
+     */
+    static void go(WebView v, String url) {
+        if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
+            java.util.HashMap<String, String> h = new java.util.HashMap<String, String>();
+            h.put("X-Requested-With", "");
+            v.loadUrl(url, h);
+        } else {
+            v.loadUrl(url);
+        }
+    }
+
+    static void again(WebView v) {
+        String u = v.getUrl();
+        if (u != null && u.startsWith("http")) go(v, u); else v.reload();
+    }
+
+    /**
      * Looks like Chrome instead of "an embedded WebView" (drops the "; wv" and "Version/4.0"
      * markers) so sites such as Google sign-in do not refuse the browser. Desktop mode also
      * swaps the platform token and drops "Mobile".
@@ -290,7 +310,7 @@ final class WebFactory {
             view.post(new Runnable() {
                 @Override
                 public void run() {
-                    v.reload();
+                    again(v);
                 }
             });
         }
@@ -430,7 +450,7 @@ final class WebFactory {
             t.revalidated = t.url == null ? "" : t.url;
         }
         view.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
-        view.reload();
+        again(view);
     }
 
     private static final class Client extends WebViewClient {
@@ -478,9 +498,14 @@ final class WebFactory {
             if (scheme.equals("http") && req.isForMainFrame()) {
                 String up = upgrade(tab, u.toString());
                 if (up != null) {
-                    view.loadUrl(up);
+                    go(view, up);
                     return true;
                 }
+            }
+            if ((scheme.equals("http") || scheme.equals("https")) && req.isForMainFrame()
+                    && !req.isRedirect() && "GET".equals(req.getMethod())) {
+                go(view, u.toString());
+                return true;
             }
             if (scheme.equals("http") || scheme.equals("https") || scheme.equals("about")
                     || scheme.equals("data") || scheme.equals("blob")
@@ -563,7 +588,7 @@ final class WebFactory {
                 String http = tab.fallbackHttp;
                 tab.fallbackHttp = null;
                 tab.noUpgradeHost = hostOf(http);
-                view.loadUrl(http);
+                go(view, http);
             }
         }
 
