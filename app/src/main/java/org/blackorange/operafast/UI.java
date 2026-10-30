@@ -52,6 +52,14 @@ final class UI {
     static final String DESKTOP = "";
     static final String CHECK = "";
     static final String OPEN = "";
+    static final String BOOKMARK = "";
+    static final String BOOKMARK_BORDER = "";
+    static final String FIND = "";
+    static final String MOON = "";
+    static final String IMAGE = "";
+    static final String UP = "";
+    static final String DOWN = "";
+    static final String GLOBE = "";
 
     private static Typeface iconFont;
 
@@ -82,6 +90,13 @@ final class UI {
         GradientDrawable d = new GradientDrawable();
         d.setColor(color);
         d.setCornerRadius(radiusPx);
+        return d;
+    }
+
+    static GradientDrawable roundedTop(int color, int radiusPx) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadii(new float[]{radiusPx, radiusPx, radiusPx, radiusPx, 0, 0, 0, 0});
         return d;
     }
 
@@ -181,26 +196,64 @@ final class UI {
         }
     }
 
-    /** Thin red page-load progress line under the address bar. */
+    /**
+     * Thin red page-load progress line under the address bar. The bar glides to each new value
+     * and fades out after reaching 100, instead of jumping.
+     */
     static final class ProgressLine extends View {
         private final Paint paint = new Paint();
-        private int progress = 100;
+        private float shown;                       // 0 = idle, 0..100 = loading
+        private android.animation.ValueAnimator anim;
 
         ProgressLine(Context c) {
             super(c);
             paint.setColor(ACCENT);
-            setVisibility(INVISIBLE);
+            setAlpha(0f);
         }
 
         void setProgress(int p) {
-            progress = p;
-            setVisibility(p <= 0 || p >= 100 ? INVISIBLE : VISIBLE);
-            invalidate();
+            if (anim != null) anim.cancel();
+            animate().cancel();
+            if (p <= 0) {
+                shown = 0f;
+                setAlpha(0f);
+                invalidate();
+                return;
+            }
+            final boolean finishing = p >= 100;
+            if (finishing && (shown <= 0.01f || shown >= 100f)) return; // nothing was loading
+            setAlpha(1f);
+            anim = android.animation.ValueAnimator.ofFloat(shown, finishing ? 100f : (float) p);
+            anim.setDuration(finishing ? 150 : 250);
+            anim.setInterpolator(new android.view.animation.DecelerateInterpolator());
+            anim.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(android.animation.ValueAnimator a) {
+                    shown = (Float) a.getAnimatedValue();
+                    invalidate();
+                }
+            });
+            if (finishing) {
+                anim.addListener(new android.animation.AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(android.animation.Animator a) {
+                        if (shown < 99.9f) return; // cancelled by a newer value
+                        animate().alpha(0f).setDuration(220).withEndAction(new Runnable() {
+                            @Override
+                            public void run() {
+                                shown = 0f;
+                                invalidate();
+                            }
+                        }).start();
+                    }
+                });
+            }
+            anim.start();
         }
 
         @Override
         protected void onDraw(Canvas canvas) {
-            canvas.drawRect(0, 0, getWidth() * progress / 100f, getHeight(), paint);
+            canvas.drawRect(0, 0, getWidth() * shown / 100f, getHeight(), paint);
         }
     }
 }

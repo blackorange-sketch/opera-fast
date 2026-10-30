@@ -18,6 +18,7 @@ final class Tab {
     WebView wv;               // null until the tab is shown for the first time / after eviction
     Bundle state;             // WebView back-forward state saved when wv was released
     Bitmap favicon;
+    Bitmap thumb;             // small screenshot for the tab switcher (taken when it opens)
     boolean loading;
     int progress;
     long lastUsed;

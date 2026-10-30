@@ -4,21 +4,29 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.SearchManager;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentCallbacks2;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.drawable.ColorDrawable;
+import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Patterns;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
@@ -29,7 +37,6 @@ import android.webkit.WebView;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -75,7 +82,9 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private UI.ProgressLine progress;
 
     private View overlay;
-    private PopupWindow menu;
+    private LinearLayout findBar;
+    private EditText findField;
+    private TextView findCount;
     private FrameLayout customHolder;
     private WebChromeClient.CustomViewCallback customCb;
     private ValueCallback<Uri[]> fileCb;
@@ -95,6 +104,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AdBlock.init(this);
+        Settings.init(this);
 
         boolean restored = tabs.restore(
                 getSharedPreferences("session", MODE_PRIVATE).getString("data", null));
@@ -134,7 +144,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
         super.onTrimMemory(level);
         if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
             for (Tab t : tabs.all()) {
-                if (t != shown) release(t);
+                if (t != shown) {
+                    release(t);
+                    t.thumb = null;
+                }
             }
         }
     }
@@ -244,6 +257,75 @@ public class MainActivity extends Activity implements WebFactory.Host {
         progress = new UI.ProgressLine(this);
         rootLayout.addView(progress, new LinearLayout.LayoutParams(MATCH, dp(2)));
 
+        // ---- find-in-page bar (hidden until used)
+        findBar = new LinearLayout(this);
+        findBar.setOrientation(LinearLayout.HORIZONTAL);
+        findBar.setGravity(Gravity.CENTER_VERTICAL);
+        findBar.setBackgroundColor(UI.BG_BAR);
+        findBar.setPadding(dp(12), 0, dp(4), 0);
+        findBar.setVisibility(View.GONE);
+        findField = new EditText(this);
+        findField.setBackground(null);
+        findField.setTextColor(UI.TEXT);
+        findField.setHintTextColor(UI.TEXT_MUTED);
+        findField.setHint("Find in page");
+        findField.setTextSize(15);
+        findField.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        findField.setSingleLine(true);
+        findField.setImeOptions(EditorInfo.IME_ACTION_SEARCH | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+        findField.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable e) {
+                runFind(e.toString());
+            }
+        });
+        findField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent ev) {
+                if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                    findStep(true);
+                    return true;
+                }
+                return false;
+            }
+        });
+        findBar.addView(findField, new LinearLayout.LayoutParams(0, MATCH, 1f));
+        findCount = UI.label(this, "", 13, UI.TEXT_MUTED);
+        findBar.addView(findCount, new LinearLayout.LayoutParams(WRAP, WRAP));
+        TextView findPrev = UI.iconButton(this, UI.UP, 22);
+        findPrev.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                findStep(false);
+            }
+        });
+        findBar.addView(findPrev, new LinearLayout.LayoutParams(dp(40), MATCH));
+        TextView findNext = UI.iconButton(this, UI.DOWN, 22);
+        findNext.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                findStep(true);
+            }
+        });
+        findBar.addView(findNext, new LinearLayout.LayoutParams(dp(40), MATCH));
+        TextView findClose = UI.iconButton(this, UI.CLOSE, 20);
+        findClose.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                hideFindBar();
+            }
+        });
+        findBar.addView(findClose, new LinearLayout.LayoutParams(dp(40), MATCH));
+        rootLayout.addView(findBar, new LinearLayout.LayoutParams(MATCH, dp(46)));
+
         // ---- middle: start page or WebView of the active tab
         FrameLayout content = new FrameLayout(this);
         speedDial = new SpeedDialView(this, new SpeedDialView.Listener() {
@@ -316,9 +398,11 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     private void showTab(Tab t) {
         if (t == null) return;
-        if (shown != null && shown != t && shown.wv != null) {
-            webHost.removeView(shown.wv);
-            shown.wv.onPause();
+        Tab prev = shown;
+        if (prev != null && prev != t) hideFindBar();
+        if (prev != null && prev != t && prev.wv != null) {
+            webHost.removeView(prev.wv);
+            prev.wv.onPause();
         }
         shown = t;
         tabs.activate(t);
@@ -339,6 +423,12 @@ public class MainActivity extends Activity implements WebFactory.Host {
         syncBars();
         trimLive();
         scheduleSave();
+        if (prev != t) {
+            // soft cross-fade into the newly shown tab
+            View enter = speedDial.getVisibility() == View.VISIBLE ? speedDial : webHost;
+            enter.setAlpha(0.25f);
+            enter.animate().alpha(1f).setDuration(180).start();
+        }
     }
 
     private void ensureWebView(Tab t) {
@@ -366,17 +456,54 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     private void newTab() {
-        Tab t = tabs.add(null, null);
-        showTab(t);
-        urlField.requestFocus();
-        ui.post(new Runnable() {
+        // grab a preview of the page we are leaving, then open the new tab
+        captureThumb(shown, new Runnable() {
             @Override
             public void run() {
-                InputMethodManager im =
-                        (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-                if (im != null) im.showSoftInput(urlField, InputMethodManager.SHOW_IMPLICIT);
+                Tab t = tabs.add(null, null);
+                showTab(t);
+                urlField.requestFocus();
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        InputMethodManager im =
+                                (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                        if (im != null) {
+                            im.showSoftInput(urlField, InputMethodManager.SHOW_IMPLICIT);
+                        }
+                    }
+                });
             }
         });
+    }
+
+    /** Screenshot of the visible page (small), for the tab switcher. Always calls done once. */
+    private void captureThumb(final Tab t, final Runnable done) {
+        if (t == null || t.wv == null || t.isBlank() || overlay != null
+                || webHost.getVisibility() != View.VISIBLE
+                || webHost.getWidth() <= 0 || webHost.getHeight() <= 0) {
+            done.run();
+            return;
+        }
+        try {
+            int[] loc = new int[2];
+            webHost.getLocationInWindow(loc);
+            int w = webHost.getWidth();
+            int h = webHost.getHeight();
+            int tw = 360;
+            int th = Math.max(1, tw * h / w);
+            final Bitmap bmp = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
+            Rect r = new Rect(loc[0], loc[1], loc[0] + w, loc[1] + h);
+            PixelCopy.request(getWindow(), r, bmp, new PixelCopy.OnPixelCopyFinishedListener() {
+                @Override
+                public void onPixelCopyFinished(int result) {
+                    if (result == PixelCopy.SUCCESS) t.thumb = bmp;
+                    done.run();
+                }
+            }, ui);
+        } catch (Exception e) {
+            done.run();
+        }
     }
 
     private void closeTab(Tab t) {
@@ -581,6 +708,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
             closeOverlay();
             return;
         }
+        if (findBar.getVisibility() == View.VISIBLE) {
+            hideFindBar();
+            return;
+        }
         if (urlField.hasFocus()) {
             clearUrlFocus();
             return;
@@ -630,48 +761,109 @@ public class MainActivity extends Activity implements WebFactory.Host {
     // ------------------------------------------------------------------ overlays & menu
 
     private void showOverlay(View v) {
+        showOverlay(v, true);
+    }
+
+    private void showOverlay(View v, boolean animate) {
         clearUrlFocus();
         closeOverlay();
         overlay = v;
         screen.addView(v, new FrameLayout.LayoutParams(MATCH, MATCH));
+        if (animate) {
+            v.setAlpha(0f);
+            v.setTranslationY(dp(28));
+            v.animate().alpha(1f).translationY(0f).setDuration(200)
+                    .setInterpolator(new DecelerateInterpolator()).withLayer().start();
+        }
     }
 
     private void closeOverlay() {
-        if (overlay != null) {
-            screen.removeView(overlay);
-            overlay = null;
+        final View v = overlay;
+        if (v == null) return;
+        overlay = null;
+        Runnable remove = new Runnable() {
+            @Override
+            public void run() {
+                screen.removeView(v);
+            }
+        };
+        if (v instanceof MenuSheet) {
+            ((MenuSheet) v).animateOut(remove);
+        } else {
+            v.animate().alpha(0f).translationY(dp(28)).setDuration(150)
+                    .setInterpolator(new AccelerateInterpolator()).withEndAction(remove).start();
         }
     }
 
     private void openSwitcher() {
-        showOverlay(new TabSwitcherView(this, tabs, new TabSwitcherView.Listener() {
+        final float aspect = webHost.getWidth() > 0
+                ? (float) webHost.getHeight() / webHost.getWidth() : 1.6f;
+        captureThumb(shown, new Runnable() {
             @Override
-            public void onSelect(Tab tab) {
+            public void run() {
+                showOverlay(new TabSwitcherView(MainActivity.this, tabs, aspect,
+                        new TabSwitcherView.Listener() {
+                            @Override
+                            public void onSelect(Tab tab) {
+                                closeOverlay();
+                                showTab(tab);
+                            }
+
+                            @Override
+                            public void onClose(Tab tab) {
+                                closeTab(tab);
+                                if (overlay instanceof TabSwitcherView) {
+                                    ((TabSwitcherView) overlay).reload();
+                                }
+                            }
+
+                            @Override
+                            public void onNew() {
+                                closeOverlay();
+                                newTab();
+                            }
+
+                            @Override
+                            public void onDone() {
+                                closeOverlay();
+                            }
+
+                            @Override
+                            public void onHistory() {
+                                showHistory();
+                            }
+
+                            @Override
+                            public void onDownloads() {
+                                showDownloads();
+                            }
+
+                            @Override
+                            public void onMenu() {
+                                showMenu();
+                            }
+                        }));
+            }
+        });
+    }
+
+    private void showHistory() {
+        showOverlay(new HistoryView(this, false, new HistoryView.Listener() {
+            @Override
+            public void onOpen(String url) {
                 closeOverlay();
-                showTab(tab);
+                loadUrl(shown, url);
             }
 
             @Override
-            public void onClose(Tab tab) {
-                closeTab(tab);
-                if (overlay instanceof TabSwitcherView) ((TabSwitcherView) overlay).reload();
-            }
-
-            @Override
-            public void onNew() {
-                closeOverlay();
-                newTab();
-            }
-
-            @Override
-            public void onDone() {
+            public void onClose() {
                 closeOverlay();
             }
         }));
     }
 
-    private void showHistory() {
-        showOverlay(new HistoryView(this, new HistoryView.Listener() {
+    private void showBookmarks() {
+        showOverlay(new HistoryView(this, true, new HistoryView.Listener() {
             @Override
             public void onOpen(String url) {
                 closeOverlay();
@@ -695,89 +887,146 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     private void showMenu() {
-        if (menu != null && menu.isShowing()) {
-            menu.dismiss();
-            return;
-        }
         final Tab t = shown;
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setBackground(UI.rounded(UI.BG_CARD, dp(12)));
-        col.setPadding(0, dp(6), 0, dp(6));
-
-        addMenuRow(col, UI.ADD, "New tab", false, new Runnable() {
+        boolean page = t != null && !t.isBlank();
+        boolean[] toggles = {
+                AdBlock.isEnabled(), Settings.night(), t != null && t.desktop, Settings.noImages()};
+        boolean bookmarked = page && HistoryDb.get(this).isBookmarked(t.url);
+        showOverlay(new MenuSheet(this, toggles, page, bookmarked, new MenuSheet.Listener() {
             @Override
-            public void run() {
-                newTab();
-            }
-        });
-        addMenuRow(col, UI.HISTORY, "History", false, new Runnable() {
-            @Override
-            public void run() {
-                showHistory();
-            }
-        });
-        addMenuRow(col, UI.DOWNLOAD, "Downloads", false, new Runnable() {
-            @Override
-            public void run() {
-                showDownloads();
-            }
-        });
-        if (t != null && !t.isBlank()) {
-            addMenuRow(col, UI.SHARE, "Share page", false, new Runnable() {
-                @Override
-                public void run() {
-                    sharePage();
+            public boolean onToggle(int id) {
+                switch (id) {
+                    case MenuSheet.ADBLOCK:
+                        AdBlock.setEnabled(!AdBlock.isEnabled());
+                        reloadActive();
+                        updateShield();
+                        return AdBlock.isEnabled();
+                    case MenuSheet.NIGHT:
+                        Settings.setNight(!Settings.night());
+                        applyDisplayPrefs(false);
+                        return Settings.night();
+                    case MenuSheet.DESKTOP:
+                        if (t == null) return false;
+                        t.desktop = !t.desktop;
+                        if (t.wv != null) {
+                            WebFactory.applyUserAgent(t.wv, t.desktop);
+                            t.wv.reload();
+                        }
+                        scheduleSave();
+                        return t.desktop;
+                    case MenuSheet.IMAGES:
+                        Settings.setNoImages(!Settings.noImages());
+                        applyDisplayPrefs(true);
+                        return Settings.noImages();
+                    default:
+                        return false;
                 }
-            });
-            addMenuRow(col, UI.DESKTOP, "Desktop site", t.desktop, new Runnable() {
-                @Override
-                public void run() {
-                    t.desktop = !t.desktop;
-                    if (t.wv != null) {
-                        WebFactory.applyUserAgent(t.wv, t.desktop);
-                        t.wv.reload();
-                    }
-                    scheduleSave();
-                }
-            });
-        }
-        addMenuRow(col, UI.DELETE, "Clear browsing data", false, new Runnable() {
-            @Override
-            public void run() {
-                confirmClearData();
             }
-        });
 
-        menu = new PopupWindow(col, dp(250), WRAP, true);
-        menu.setBackgroundDrawable(new ColorDrawable(0));
-        menu.showAtLocation(screen, Gravity.BOTTOM | Gravity.END, dp(8), dp(52) + dp(8));
+            @Override
+            public void onAction(int id) {
+                closeOverlay();
+                switch (id) {
+                    case MenuSheet.BOOKMARKS:
+                        showBookmarks();
+                        break;
+                    case MenuSheet.DOWNLOADS:
+                        showDownloads();
+                        break;
+                    case MenuSheet.HISTORY:
+                        showHistory();
+                        break;
+                    case MenuSheet.BOOKMARK_PAGE:
+                        toggleBookmark();
+                        break;
+                    case MenuSheet.FIND:
+                        showFindBar();
+                        break;
+                    case MenuSheet.SHARE:
+                        sharePage();
+                        break;
+                    case MenuSheet.CLEAR:
+                        confirmClearData();
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            @Override
+            public void onDismiss() {
+                closeOverlay();
+            }
+        }), false);
     }
 
-    private void addMenuRow(LinearLayout col, String glyph, String text, boolean checked,
-                            final Runnable action) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackground(UI.ripple());
-        row.setClickable(true);
-        row.setPadding(dp(8), 0, dp(8), 0);
-
-        row.addView(UI.icon(this, glyph, 20, UI.TEXT_MUTED), new LinearLayout.LayoutParams(dp(40), dp(48)));
-        TextView label = UI.label(this, text, 15, UI.TEXT);
-        row.addView(label, new LinearLayout.LayoutParams(0, WRAP, 1f));
-        if (checked) {
-            row.addView(UI.icon(this, UI.CHECK, 20, UI.ACCENT),
-                    new LinearLayout.LayoutParams(dp(32), dp(48)));
+    private void applyDisplayPrefs(boolean reloadShown) {
+        for (Tab t : tabs.all()) {
+            if (t.wv != null) WebFactory.applyDisplayPrefs(t.wv);
         }
-        row.setOnClickListener(new View.OnClickListener() {
+        if (reloadShown) reloadActive();
+    }
+
+    private void toggleBookmark() {
+        Tab t = shown;
+        if (t == null || t.isBlank()) return;
+        HistoryDb db = HistoryDb.get(this);
+        if (db.isBookmarked(t.url)) {
+            db.removeBookmark(t.url);
+            toast("Bookmark removed");
+        } else {
+            db.addBookmark(t.url, t.title);
+            toast("Bookmark added");
+        }
+    }
+
+    // ------------------------------------------------------------------ find in page
+
+    private void showFindBar() {
+        findBar.setVisibility(View.VISIBLE);
+        findField.setText("");
+        findCount.setText("");
+        findField.requestFocus();
+        ui.post(new Runnable() {
             @Override
-            public void onClick(View v) {
-                if (menu != null) menu.dismiss();
-                action.run();
+            public void run() {
+                InputMethodManager im = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (im != null) im.showSoftInput(findField, InputMethodManager.SHOW_IMPLICIT);
             }
         });
-        col.addView(row, new LinearLayout.LayoutParams(MATCH, dp(48)));
+    }
+
+    private void hideFindBar() {
+        if (findBar.getVisibility() != View.VISIBLE) return;
+        findBar.setVisibility(View.GONE);
+        Tab t = shown;
+        if (t != null && t.wv != null) t.wv.clearMatches();
+        InputMethodManager im = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (im != null) im.hideSoftInputFromWindow(findField.getWindowToken(), 0);
+        findField.clearFocus();
+        rootLayout.requestFocus();
+    }
+
+    private void runFind(String q) {
+        Tab t = shown;
+        if (t == null || t.wv == null) return;
+        if (q.isEmpty()) {
+            t.wv.clearMatches();
+            findCount.setText("");
+            return;
+        }
+        t.wv.setFindListener(new WebView.FindListener() {
+            @Override
+            public void onFindResultReceived(int active, int total, boolean done) {
+                findCount.setText(total == 0 ? "0/0" : (active + 1) + "/" + total);
+            }
+        });
+        t.wv.findAllAsync(q);
+    }
+
+    private void findStep(boolean forward) {
+        Tab t = shown;
+        if (t != null && t.wv != null) t.wv.findNext(forward);
     }
 
     private void sharePage() {
@@ -982,6 +1231,37 @@ public class MainActivity extends Activity implements WebFactory.Host {
         } catch (Exception ignored) {
             // nothing installed that can handle it
         }
+    }
+
+    @Override
+    public void onLinkLongPress(final Tab tab, final String url) {
+        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle(UI.hostOf(url))
+                .setItems(new CharSequence[]{"Open in new tab", "Copy link", "Share link"},
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d, int which) {
+                                if (which == 0) {
+                                    tabs.add(url, tab);
+                                    syncBars();
+                                    scheduleSave();
+                                    toast("Opened in a new tab");
+                                } else if (which == 1) {
+                                    ClipboardManager cm =
+                                            (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                                    if (cm != null) {
+                                        cm.setPrimaryClip(ClipData.newPlainText("link", url));
+                                    }
+                                    toast("Link copied");
+                                } else {
+                                    Intent i = new Intent(Intent.ACTION_SEND);
+                                    i.setType("text/plain");
+                                    i.putExtra(Intent.EXTRA_TEXT, url);
+                                    startActivity(Intent.createChooser(i, "Share link"));
+                                }
+                            }
+                        })
+                .show();
     }
 
     @Override

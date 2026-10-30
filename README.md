@@ -51,3 +51,9 @@ Plain text from the search box is turned into a URL or a DuckDuckGo search by th
 CI (`.github/workflows/build.yml`) builds a signed release APK on every push
 (artifact `operafast-release`). Locally: `gradle assembleRelease` (JDK 17, Android SDK 34).
 The APK is signed with the committed `android/debug.keystore`, so new builds update old ones.
+
+## Update: Opera-style tabs & polish
+- Tab switcher: swipeable card carousel with page previews, thumbnail strip, floating action bar
+- Bottom-sheet menu with toggles: ad blocker, night mode, desktop site, no images
+- Bookmarks, find in page, long-press on a link (new tab / copy / share)
+- Smooth animations: overlays, menu, tab switch, progress bar

@@ -44,6 +44,9 @@ final class WebFactory {
 
         /** The renderer process died (usually out of memory). */
         void onRenderGone(Tab tab);
+
+        /** Long press on a link. */
+        void onLinkLongPress(Tab tab, String url);
     }
 
     static WebView create(Context ctx, final Tab tab, final Host host) {
@@ -66,6 +69,22 @@ final class WebFactory {
         s.setAllowContentAccess(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         applyUserAgent(wv, tab.desktop);
+        applyDisplayPrefs(wv);
+
+        wv.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                WebView.HitTestResult r = ((WebView) v).getHitTestResult();
+                if (r != null && r.getType() == WebView.HitTestResult.SRC_ANCHOR_TYPE) {
+                    String link = r.getExtra();
+                    if (link != null) {
+                        host.onLinkLongPress(tab, link);
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
 
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
@@ -104,6 +123,18 @@ final class WebFactory {
         s.setUserAgentString(ua);
         s.setUseWideViewPort(true);
         s.setLoadWithOverviewMode(true);
+    }
+
+    /** Night mode (dark pages) and text-only mode; called on creation and when toggled. */
+    @SuppressWarnings("deprecation")
+    static void applyDisplayPrefs(WebView wv) {
+        WebSettings s = wv.getSettings();
+        s.setLoadsImagesAutomatically(!Settings.noImages());
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            s.setAlgorithmicDarkeningAllowed(Settings.night());
+        } else if (android.os.Build.VERSION.SDK_INT >= 29) {
+            s.setForceDark(Settings.night() ? WebSettings.FORCE_DARK_ON : WebSettings.FORCE_DARK_OFF);
+        }
     }
 
     private static final class Client extends WebViewClient {

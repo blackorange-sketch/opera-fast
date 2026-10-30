@@ -3,17 +3,26 @@ package org.blackorange.operafast;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.List;
 
-/** Full-screen tab overview: two-column grid of cards, tap to switch, X to close, + for new. */
-final class TabSwitcherView extends LinearLayout {
+/**
+ * Opera-style tab switcher: a horizontally snapping carousel of big page previews (the centred
+ * card is full size, neighbours are smaller and dimmer), a strip of small thumbnails under it,
+ * and a floating pill bar with the "+" button.
+ */
+final class TabSwitcherView extends FrameLayout {
 
     interface Listener {
         void onSelect(Tab tab);
@@ -23,139 +32,445 @@ final class TabSwitcherView extends LinearLayout {
         void onNew();
 
         void onDone();
+
+        void onHistory();
+
+        void onDownloads();
+
+        void onMenu();
     }
+
+    private static final int CARD_BG = 0xFF2E2A3C;
 
     private final TabManager tabs;
     private final Listener listener;
-    private final LinearLayout grid;
-    private final TextView title;
+    private final float aspect;                 // page area height / width
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
-    TabSwitcherView(Context c, TabManager tabs, final Listener listener) {
+    private HorizontalScrollView carousel;
+    private LinearLayout cards;
+    private HorizontalScrollView stripScroll;
+    private LinearLayout strip;
+    private TextView countLabel;
+
+    private int builtWidth = -1;
+    private int step = 1;
+    private int index = -1;
+    private int lastScrollX = Integer.MIN_VALUE;
+
+    TabSwitcherView(Context c, TabManager tabs, float aspect, Listener listener) {
         super(c);
         this.tabs = tabs;
         this.listener = listener;
-        setOrientation(VERTICAL);
-        setBackgroundColor(UI.BG_APP);
+        this.aspect = aspect;
         setClickable(true);
+        setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xFF2B2140, 0xFF15141C}));
 
-        LinearLayout header = UI.header(c, "Tabs", new View.OnClickListener() {
+        LinearLayout column = new LinearLayout(c);
+        column.setOrientation(LinearLayout.VERTICAL);
+        addView(column, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // ---- header: "Tabs" with accent underline, tab count on the right
+        LinearLayout header = new LinearLayout(c);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(UI.dp(c, 20), UI.dp(c, 8), UI.dp(c, 20), 0);
+
+        LinearLayout titleBox = new LinearLayout(c);
+        titleBox.setOrientation(LinearLayout.VERTICAL);
+        TextView title = UI.label(c, "Tabs", 18, UI.TEXT);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        titleBox.addView(title, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        View underline = new View(c);
+        underline.setBackgroundColor(UI.ACCENT);
+        LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 2));
+        ulp.topMargin = UI.dp(c, 6);
+        titleBox.addView(underline, ulp);
+        header.addView(titleBox, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        View grow = new View(c);
+        header.addView(grow, new LinearLayout.LayoutParams(0, 1, 1f));
+        countLabel = UI.label(c, "", 14, UI.TEXT_MUTED);
+        header.addView(countLabel, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        column.addView(header, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 56)));
+
+        // ---- carousel of big cards
+        FrameLayout carouselArea = new FrameLayout(c);
+        carousel = new HorizontalScrollView(c);
+        carousel.setHorizontalScrollBarEnabled(false);
+        carousel.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        cards = new LinearLayout(c);
+        cards.setOrientation(LinearLayout.HORIZONTAL);
+        carousel.addView(cards, new HorizontalScrollView.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        carouselArea.addView(carousel, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER_VERTICAL));
+        column.addView(carouselArea, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        carousel.setOnScrollChangeListener(new View.OnScrollChangeListener() {
+            @Override
+            public void onScrollChange(View v, int sx, int sy, int ox, int oy) {
+                updateEffects(sx);
+            }
+        });
+        carousel.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent e) {
+                int a = e.getActionMasked();
+                if (a == MotionEvent.ACTION_DOWN) {
+                    handler.removeCallbacks(snapCheck);
+                } else if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
+                    lastScrollX = Integer.MIN_VALUE;
+                    handler.removeCallbacks(snapCheck);
+                    handler.postDelayed(snapCheck, 50);
+                }
+                return false;
+            }
+        });
+
+        // ---- thumbnail strip
+        stripScroll = new HorizontalScrollView(c);
+        stripScroll.setHorizontalScrollBarEnabled(false);
+        stripScroll.setFillViewport(true);
+        strip = new LinearLayout(c);
+        strip.setOrientation(LinearLayout.HORIZONTAL);
+        strip.setGravity(Gravity.CENTER);
+        strip.setPadding(UI.dp(c, 12), 0, UI.dp(c, 12), 0);
+        stripScroll.addView(strip, new HorizontalScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        column.addView(stripScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 84)));
+
+        // room for the floating bar
+        column.addView(new View(c), new LinearLayout.LayoutParams(1, UI.dp(c, 96)));
+
+        addView(buildBar(c), barParams(c));
+    }
+
+    // ---------------------------------------------------------------- floating bar
+
+    private FrameLayout.LayoutParams barParams(Context c) {
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, UI.dp(c, 60), Gravity.BOTTOM);
+        int m = UI.dp(c, 16);
+        lp.setMargins(m, 0, m, m);
+        return lp;
+    }
+
+    private View buildBar(Context c) {
+        LinearLayout bar = new LinearLayout(c);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setClipChildren(false);
+        bar.setBackground(UI.rounded(0xFF1E1E26, UI.dp(c, 30)));
+        bar.setElevation(UI.dp(c, 8));
+
+        TextView dl = UI.iconButton(c, UI.DOWNLOAD, 24);
+        dl.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                listener.onDone();
+                listener.onDownloads();
             }
-        }, UI.ADD, new View.OnClickListener() {
+        });
+        bar.addView(dl, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+        TextView hist = UI.iconButton(c, UI.HISTORY, 24);
+        hist.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listener.onHistory();
+            }
+        });
+        bar.addView(hist, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+        FrameLayout fabSlot = new FrameLayout(c);
+        fabSlot.setClipChildren(false);
+        TextView fab = UI.icon(c, UI.ADD, 30, 0xFFFFFFFF);
+        GradientDrawable fabBg = new GradientDrawable();
+        fabBg.setShape(GradientDrawable.OVAL);
+        fabBg.setColor(UI.ACCENT);
+        fab.setBackground(fabBg);
+        fab.setElevation(UI.dp(c, 6));
+        fab.setClickable(true);
+        fab.setTranslationY(-UI.dp(c, 8));
+        fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 listener.onNew();
             }
         });
-        title = (TextView) header.getChildAt(1);
-        addView(header, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+        fabSlot.addView(fab, new FrameLayout.LayoutParams(UI.dp(c, 64), UI.dp(c, 64), Gravity.CENTER));
+        bar.addView(fabSlot, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 
-        ScrollView sv = new ScrollView(c);
-        grid = new LinearLayout(c);
-        grid.setOrientation(VERTICAL);
-        int pad = UI.dp(c, 8);
-        grid.setPadding(pad, pad, pad, pad);
-        sv.addView(grid, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        addView(sv, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-
-        reload();
-    }
-
-    void reload() {
-        Context c = getContext();
-        grid.removeAllViews();
-        List<Tab> list = tabs.all();
-        title.setText("Tabs (" + list.size() + ")");
-
-        LinearLayout row = null;
-        for (int i = 0; i < list.size(); i++) {
-            if (i % 2 == 0) {
-                row = new LinearLayout(c);
-                row.setOrientation(HORIZONTAL);
-                grid.addView(row, new LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        FrameLayout countBtn = new FrameLayout(c);
+        countBtn.setBackground(UI.ripple());
+        countBtn.setClickable(true);
+        UI.TabCount count = new UI.TabCount(c);
+        count.setCount(tabs.size());
+        countBtn.addView(count, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        countBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listener.onDone();
             }
-            row.addView(card(c, list.get(i)), cardParams(c));
-        }
-        if (list.size() % 2 == 1 && row != null) {
-            row.addView(new View(c), cardParams(c)); // keep the last card at half width
-        }
+        });
+        bar.addView(countBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+        TextView more = UI.iconButton(c, UI.MORE, 24);
+        more.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listener.onMenu();
+            }
+        });
+        bar.addView(more, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        return bar;
     }
 
-    private LayoutParams cardParams(Context c) {
-        LayoutParams lp = new LayoutParams(0, UI.dp(c, 110), 1f);
-        int m = UI.dp(c, 6);
-        lp.setMargins(m, m, m, m);
-        return lp;
+    // ---------------------------------------------------------------- building cards
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        if (w > 0 && h > 0 && w != builtWidth) rebuild(w, h);
     }
 
-    private View card(Context c, final Tab tab) {
-        boolean isActive = tab == tabs.active();
+    /** Called by the host after a tab was closed. */
+    void reload() {
+        if (getWidth() > 0 && getHeight() > 0) rebuild(getWidth(), getHeight());
+    }
 
-        LinearLayout card = new LinearLayout(c);
-        card.setOrientation(VERTICAL);
-        GradientDrawable bg = UI.rounded(UI.BG_CARD, UI.dp(c, 12));
-        if (isActive) bg.setStroke(UI.dp(c, 2), UI.ACCENT);
+    private void rebuild(int w, int h) {
+        final Context c = getContext();
+        builtWidth = w;
+        List<Tab> list = tabs.all();
+        if (index < 0) index = Math.max(0, list.indexOf(tabs.active()));
+        index = Math.min(index, list.size() - 1);
+        countLabel.setText(list.size() == 1 ? "1 tab" : list.size() + " tabs");
+
+        int cardW = (int) (w * 0.68f);
+        int margin = UI.dp(c, 8);
+        int titleH = UI.dp(c, 46);
+        int availH = h - UI.dp(c, 56) - UI.dp(c, 84) - UI.dp(c, 96);
+        int cardH = Math.min(titleH + (int) (cardW * aspect), availH);
+        step = cardW + 2 * margin;
+
+        cards.removeAllViews();
+        int side = (w - cardW) / 2 - margin;
+        cards.setPadding(side, 0, side, 0);
+        for (int i = 0; i < list.size(); i++) {
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(cardW, cardH);
+            lp.setMargins(margin, 0, margin, 0);
+            cards.addView(card(list.get(i), i, titleH), lp);
+        }
+
+        strip.removeAllViews();
+        for (int i = 0; i < list.size(); i++) {
+            strip.addView(stripThumb(list.get(i), i));
+        }
+
+        final int target = index;
+        carousel.post(new Runnable() {
+            @Override
+            public void run() {
+                carousel.scrollTo(target * step, 0);
+                updateEffects(target * step);
+                updateStrip();
+            }
+        });
+    }
+
+    private View card(final Tab tab, final int position, int titleH) {
+        final Context c = getContext();
+        final LinearLayout card = new LinearLayout(c);
+        card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable bg = UI.rounded(CARD_BG, UI.dp(c, 22));
+        if (tab == tabs.active()) bg.setStroke(UI.dp(c, 2), UI.ACCENT);
         card.setBackground(bg);
+        card.setClipToOutline(true);
         card.setClickable(true);
-        card.setPadding(UI.dp(c, 10), UI.dp(c, 8), UI.dp(c, 4), UI.dp(c, 8));
         card.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                listener.onSelect(tab);
+                if (position == index) listener.onSelect(tab); else snapTo(position);
             }
         });
 
+        // title row: favicon / letter, title, X
         LinearLayout top = new LinearLayout(c);
-        top.setOrientation(HORIZONTAL);
+        top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setPadding(UI.dp(c, 12), 0, UI.dp(c, 4), 0);
 
         String host = UI.hostOf(tab.url);
-        String letter = tab.isBlank() || host.isEmpty() ? "+" : host.substring(0, 1).toUpperCase();
-        TextView badge = new TextView(c);
-        badge.setText(letter);
-        badge.setTextColor(UI.TEXT);
-        badge.setTextSize(13);
-        badge.setTypeface(Typeface.DEFAULT_BOLD);
-        badge.setGravity(Gravity.CENTER);
-        GradientDrawable dot = new GradientDrawable();
-        dot.setShape(GradientDrawable.OVAL);
-        dot.setColor(UI.BG_INPUT);
-        badge.setBackground(dot);
-        top.addView(badge, new LayoutParams(UI.dp(c, 24), UI.dp(c, 24)));
+        if (tab.favicon != null) {
+            ImageView icon = new ImageView(c);
+            icon.setImageBitmap(tab.favicon);
+            top.addView(icon, new LinearLayout.LayoutParams(UI.dp(c, 22), UI.dp(c, 22)));
+        } else {
+            String letter = tab.isBlank() || host.isEmpty() ? "+" : host.substring(0, 1).toUpperCase();
+            TextView badge = new TextView(c);
+            badge.setText(letter);
+            badge.setTextColor(UI.TEXT);
+            badge.setTextSize(12);
+            badge.setTypeface(Typeface.DEFAULT_BOLD);
+            badge.setGravity(Gravity.CENTER);
+            GradientDrawable dot = new GradientDrawable();
+            dot.setShape(GradientDrawable.OVAL);
+            dot.setColor(UI.BG_INPUT);
+            badge.setBackground(dot);
+            top.addView(badge, new LinearLayout.LayoutParams(UI.dp(c, 22), UI.dp(c, 22)));
+        }
+        View gap = new View(c);
+        top.addView(gap, new LinearLayout.LayoutParams(UI.dp(c, 10), 1));
 
-        top.addView(new View(c), new LayoutParams(UI.dp(c, 8), 1));
-        TextView name = UI.label(c, tab.isBlank() ? "New tab" : host, 13, UI.TEXT_MUTED);
-        top.addView(name, new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        String name = tab.title != null && !tab.title.isEmpty() ? tab.title
+                : (tab.isBlank() ? "New tab" : host);
+        TextView title = UI.label(c, name, 14, UI.TEXT);
+        top.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView x = UI.iconButton(c, UI.CLOSE, 18);
+        final TextView x = UI.iconButton(c, UI.CLOSE, 20);
         x.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                listener.onClose(tab);
+                x.setEnabled(false);
+                card.animate().translationY(-UI.dp(c, 60)).alpha(0f).setDuration(170)
+                        .withEndAction(new Runnable() {
+                            @Override
+                            public void run() {
+                                listener.onClose(tab);
+                            }
+                        }).start();
             }
         });
-        top.addView(x, new LayoutParams(UI.dp(c, 36), UI.dp(c, 36)));
-        card.addView(top, new LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        top.addView(x, new LinearLayout.LayoutParams(UI.dp(c, 40), UI.dp(c, 40)));
+        card.addView(top, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, titleH));
 
-        String t = tab.title != null && !tab.title.isEmpty() ? tab.title
-                : (tab.isBlank() ? "Start page" : tab.url);
-        TextView body = new TextView(c);
-        body.setText(t);
-        body.setTextColor(UI.TEXT);
-        body.setTextSize(14);
-        body.setMaxLines(3);
-        body.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LayoutParams bp = new LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        bp.topMargin = UI.dp(c, 6);
-        bp.rightMargin = UI.dp(c, 6);
-        card.addView(body, bp);
+        // preview area
+        FrameLayout area = new FrameLayout(c);
+        if (tab.thumb != null) {
+            ImageView img = new ImageView(c);
+            img.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            img.setImageBitmap(tab.thumb);
+            area.addView(img, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        } else {
+            area.setBackgroundColor(0xFF1E1E26);
+            LinearLayout ph = new LinearLayout(c);
+            ph.setOrientation(LinearLayout.VERTICAL);
+            ph.setGravity(Gravity.CENTER);
+            ph.addView(UI.icon(c, UI.GLOBE, 40, UI.TEXT_MUTED));
+            TextView t = UI.label(c, tab.isBlank() ? "Start page" : host, 13, UI.TEXT_MUTED);
+            t.setGravity(Gravity.CENTER);
+            ph.addView(t, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            area.addView(ph, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        card.addView(area, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         return card;
+    }
+
+    private View stripThumb(Tab tab, final int position) {
+        Context c = getContext();
+        FrameLayout f = new FrameLayout(c);
+        f.setBackground(UI.rounded(0xFF1E1E26, UI.dp(c, 6)));
+        f.setClipToOutline(true);
+        f.setClickable(true);
+        if (tab.thumb != null) {
+            ImageView img = new ImageView(c);
+            img.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            img.setImageBitmap(tab.thumb);
+            f.addView(img, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        } else {
+            f.addView(UI.icon(c, UI.GLOBE, 16, UI.TEXT_MUTED), new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        f.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                snapTo(position);
+            }
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UI.dp(c, 38), UI.dp(c, 62));
+        lp.setMargins(UI.dp(c, 5), 0, UI.dp(c, 5), 0);
+        f.setLayoutParams(lp);
+        return f;
+    }
+
+    // ---------------------------------------------------------------- scrolling / snapping
+
+    /** Scale and dim cards by their distance from the centre; track the centred index. */
+    private void updateEffects(int scrollX) {
+        int n = cards.getChildCount();
+        for (int i = 0; i < n; i++) {
+            float d = Math.min(1f, Math.abs(scrollX - i * step) / (float) step);
+            View card = cards.getChildAt(i);
+            float s = 1f - 0.12f * d;
+            card.setScaleX(s);
+            card.setScaleY(s);
+            card.setAlpha(1f - 0.45f * d);
+        }
+        int nearest = Math.max(0, Math.min(n - 1, Math.round(scrollX / (float) step)));
+        if (nearest != index) {
+            index = nearest;
+            updateStrip();
+        }
+    }
+
+    private void updateStrip() {
+        int n = strip.getChildCount();
+        for (int i = 0; i < n; i++) {
+            View t = strip.getChildAt(i);
+            boolean on = i == index;
+            t.setAlpha(on ? 1f : 0.55f);
+            t.setScaleX(on ? 1.15f : 1f);
+            t.setScaleY(on ? 1.15f : 1f);
+        }
+        if (index >= 0 && index < n) {
+            View t = strip.getChildAt(index);
+            stripScroll.smoothScrollTo(t.getLeft() - (stripScroll.getWidth() - t.getWidth()) / 2, 0);
+        }
+    }
+
+    private void snapTo(int position) {
+        int n = cards.getChildCount();
+        if (n == 0) return;
+        int p = Math.max(0, Math.min(n - 1, position));
+        carousel.smoothScrollTo(p * step, 0);
+    }
+
+    /** After the finger lifts: wait until the fling settles, then snap to the nearest card. */
+    private final Runnable snapCheck = new Runnable() {
+        @Override
+        public void run() {
+            int x = carousel.getScrollX();
+            if (x == lastScrollX) {
+                snapTo(Math.round(x / (float) step));
+                lastScrollX = Integer.MIN_VALUE;
+            } else {
+                lastScrollX = x;
+                handler.postDelayed(this, 50);
+            }
+        }
+    };
+
+    @Override
+    protected void onDetachedFromWindow() {
+        handler.removeCallbacksAndMessages(null);
+        super.onDetachedFromWindow();
     }
 }

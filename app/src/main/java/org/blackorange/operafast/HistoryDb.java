@@ -29,7 +29,7 @@ final class HistoryDb extends SQLiteOpenHelper {
     }
 
     private HistoryDb(Context c) {
-        super(c, "history.db", null, 1);
+        super(c, "history.db", null, 2);
     }
 
     @Override
@@ -41,11 +41,73 @@ final class HistoryDb extends SQLiteOpenHelper {
                 + "last_visit INTEGER NOT NULL,"
                 + "visits INTEGER NOT NULL DEFAULT 1)");
         db.execSQL("CREATE INDEX idx_history_last ON history(last_visit DESC)");
+        createBookmarks(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // v1 only
+        if (oldVersion < 2) createBookmarks(db);
+    }
+
+    private static void createBookmarks(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE bookmarks ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "url TEXT NOT NULL UNIQUE,"
+                + "title TEXT,"
+                + "added INTEGER NOT NULL)");
+    }
+
+    // ---- bookmarks (tiny, so done synchronously: the UI reads the result right away)
+
+    boolean isBookmarked(String url) {
+        if (url == null) return false;
+        Cursor c = null;
+        try {
+            c = getReadableDatabase().rawQuery(
+                    "SELECT 1 FROM bookmarks WHERE url=?", new String[]{url});
+            return c.moveToFirst();
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (c != null) c.close();
+        }
+    }
+
+    void addBookmark(String url, String title) {
+        try {
+            getWritableDatabase().execSQL(
+                    "INSERT OR REPLACE INTO bookmarks(url,title,added) VALUES(?,?,?)",
+                    new Object[]{url, title == null ? "" : title, System.currentTimeMillis()});
+        } catch (Exception ignored) {
+        }
+    }
+
+    void removeBookmark(String url) {
+        try {
+            getWritableDatabase().execSQL("DELETE FROM bookmarks WHERE url=?", new Object[]{url});
+        } catch (Exception ignored) {
+        }
+    }
+
+    List<Entry> bookmarks() {
+        List<Entry> out = new ArrayList<Entry>();
+        Cursor c = null;
+        try {
+            c = getReadableDatabase().rawQuery(
+                    "SELECT _id,url,title,added FROM bookmarks ORDER BY added DESC", null);
+            while (c.moveToNext()) {
+                Entry e = new Entry();
+                e.id = c.getLong(0);
+                e.url = c.getString(1);
+                e.title = c.getString(2);
+                e.time = c.getLong(3);
+                out.add(e);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        return out;
     }
 
     static boolean isRecordable(String url) {
