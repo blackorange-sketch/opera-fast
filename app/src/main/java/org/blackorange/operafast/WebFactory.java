@@ -335,6 +335,32 @@ final class WebFactory {
      * Hybrid cache: the page was shown from the cache (fast load); when the reader hasn't
      * scrolled yet, quietly revalidate it with the server so it is up to date.
      */
+    /**
+     * Newly exposed WebView area (when the bars slide away) is painted with the WebView's own
+     * background for a frame or two: make that the page's background colour, not white.
+     */
+    static void syncBackground(final WebView view) {
+        view.evaluateJavascript("(function(){function c(e){if(!e)return null;var x=getComputedStyle(e)"
+                + ".backgroundColor;return x&&x!=='rgba(0, 0, 0, 0)'&&x!=='transparent'?x:null}"
+                + "return c(document.body)||c(document.documentElement)||''})()",
+                new android.webkit.ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String v) {
+                        try {
+                            java.util.regex.Matcher m = java.util.regex.Pattern
+                                    .compile("(\\d+)\\D+(\\d+)\\D+(\\d+)").matcher(v == null ? "" : v);
+                            int color = 0xFFFFFFFF;
+                            if (m.find()) {
+                                color = 0xFF000000 | (Integer.parseInt(m.group(1)) << 16)
+                                        | (Integer.parseInt(m.group(2)) << 8) | Integer.parseInt(m.group(3));
+                            }
+                            view.setBackgroundColor(color);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                });
+    }
+
     private static void hybridRefresh(WebView view) {
         Object tag = view.getTag();
         if (!(tag instanceof Tab)) return;
@@ -428,6 +454,7 @@ final class WebFactory {
         @Override
         public void onPageCommitVisible(WebView view, String url) {
             // soft fade-in instead of a hard cut when the new page first paints
+            syncBackground(view);
             view.setAlpha(0.55f);
             view.animate().alpha(1f).setDuration(180).start();
         }
@@ -459,6 +486,7 @@ final class WebFactory {
                 tab.fallbackHttp = null; // the upgrade worked
             }
             passwordHooks(view, tab, host);
+            syncBackground(view);
             hybridRefresh(view);
             host.onTabState(tab);
         }
