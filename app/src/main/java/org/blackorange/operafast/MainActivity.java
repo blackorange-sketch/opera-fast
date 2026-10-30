@@ -534,9 +534,13 @@ public class MainActivity extends Activity implements WebFactory.Host {
         }
         bottomHolder = new FrameLayout(this);
         bottomHolder.addView(bottom, new FrameLayout.LayoutParams(MATCH, dp(52)));
-        rootLayout.addView(bottomHolder, new LinearLayout.LayoutParams(MATCH, WRAP));
 
         screen.addView(rootLayout, new FrameLayout.LayoutParams(MATCH, MATCH));
+        // the bottom bar floats over the page; the page gets a spacer at its end instead
+        screen.addView(bottomHolder, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM));
+        bottomHolder.setTranslationZ(dp(3));
+        speedDial.setPadding(0, 0, 0, dp(56));
+        speedDial.setClipToPadding(false);
 
         // "Fill saved login" pill above the bottom bar
         loginBar = new LinearLayout(this);
@@ -1374,9 +1378,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private void layoutBars(boolean hiddenLayout) {
         int h = hiddenLayout ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
         topHolder.getLayoutParams().height = h;
-        bottomHolder.getLayoutParams().height = h;
         topHolder.setClipChildren(false);
-        bottomHolder.setClipChildren(false);
         topHolder.setTranslationZ(dp(3));
         bottomHolder.setTranslationZ(dp(3));
         topHolder.requestLayout();
@@ -1387,7 +1389,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private void applyBars(float f, boolean hiddenLayout) {
         topBar.setTranslationY(-barsTh * f);
         if (hiddenLayout) {
-            bottomBar.setTranslationY(-barsBh * (1f - f));
+            bottomBar.setTranslationY(barsBh * f);
             contentView.setTranslationY(barsTh * (1f - f));
         } else {
             bottomBar.setTranslationY(barsBh * f);

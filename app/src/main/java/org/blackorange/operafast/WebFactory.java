@@ -361,6 +361,14 @@ final class WebFactory {
                 });
     }
 
+    /** The bottom bar floats over the page: leave room at the very end so the footer stays reachable. */
+    static void addBottomSpacer(WebView view) {
+        view.evaluateJavascript("(function(){if(document.getElementById('__of_sp'))return;"
+                + "var d=document.createElement('div');d.id='__of_sp';"
+                + "d.style.cssText='height:56px;width:1px;pointer-events:none';"
+                + "(document.body||document.documentElement).appendChild(d)})()", null);
+    }
+
     private static void hybridRefresh(WebView view) {
         Object tag = view.getTag();
         if (!(tag instanceof Tab)) return;
@@ -487,6 +495,7 @@ final class WebFactory {
             }
             passwordHooks(view, tab, host);
             syncBackground(view);
+            addBottomSpacer(view);
             hybridRefresh(view);
             host.onTabState(tab);
         }
