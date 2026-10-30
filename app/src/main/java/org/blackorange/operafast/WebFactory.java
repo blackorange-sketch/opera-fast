@@ -62,6 +62,9 @@ final class WebFactory {
         /** A page asks for camera / microphone. */
         void onSitePermission(Tab tab, android.webkit.PermissionRequest request);
 
+        /** The page scrolled (dy > 0 = content moved up). */
+        void onScrolled(Tab tab, int dy, int y);
+
         /** A page asks for the location. */
         void onGeoPrompt(Tab tab, String origin, android.webkit.GeolocationPermissions.Callback cb);
     }
@@ -92,6 +95,13 @@ final class WebFactory {
         } else {
             wv.addJavascriptInterface(new PassBridge(tab, host), "OFPass");
         }
+
+        wv.setOnScrollChangeListener(new View.OnScrollChangeListener() {
+            @Override
+            public void onScrollChange(View v, int sx, int sy, int ox, int oy) {
+                host.onScrolled(tab, sy - oy, sy);
+            }
+        });
 
         wv.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
@@ -260,6 +270,25 @@ final class WebFactory {
         s.setLoadWithOverviewMode(true);
     }
 
+    /** Per-site text size, and desktop mode if the user chose it for this site. */
+    private static void applySitePrefs(WebView view, Tab tab) {
+        String h = hostOf(tab.url);
+        if (h == null) return;
+        view.getSettings().setTextZoom(SiteSettings.zoom(h));
+        final Boolean d = SiteSettings.desktop(h);
+        if (d != null && d.booleanValue() != tab.desktop) {
+            tab.desktop = d.booleanValue();
+            applyUserAgent(view, tab.desktop);
+            final WebView v = view;
+            view.post(new Runnable() {
+                @Override
+                public void run() {
+                    v.reload();
+                }
+            });
+        }
+    }
+
     private static boolean online(Context c) {
         try {
             android.net.ConnectivityManager cm = (android.net.ConnectivityManager)
@@ -354,6 +383,7 @@ final class WebFactory {
             tab.blocked.set(0);
             tab.favicon = favicon;
             if (tab.priv) PrivateData.note(view.getContext(), hostOf(tab.url));
+            applySitePrefs(view, tab);
             host.onTabState(tab);
         }
 

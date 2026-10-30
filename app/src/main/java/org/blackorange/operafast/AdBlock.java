@@ -61,7 +61,86 @@ final class AdBlock {
         } catch (Exception ignored) {
             // No list -> no blocking, browsing still works.
         }
+        try {
+            java.io.File extra = new java.io.File(app.getFilesDir(), "adblock-hosts.txt");
+            if (extra.exists()) {
+                BufferedReader r = new BufferedReader(new InputStreamReader(
+                        new java.io.FileInputStream(extra), "UTF-8"), 1 << 16);
+                try {
+                    String line;
+                    while ((line = r.readLine()) != null) {
+                        line = line.trim();
+                        if (!line.isEmpty()) set.add(line.toLowerCase(Locale.ROOT));
+                    }
+                } finally {
+                    r.close();
+                }
+            }
+        } catch (Exception ignored) {
+        }
         hosts = set;
+    }
+
+    interface UpdateCallback {
+        /** rules >= 0 on success, -1 on failure; runs on the main thread. */
+        void done(int rules);
+    }
+
+    /** Downloads a fresh hosts list (StevenBlack unified, ads + malware) and reloads the rules. */
+    static void update(Context ctx, final UpdateCallback cb) {
+        final Context app = ctx.getApplicationContext();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                int result = -1;
+                try {
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(
+                            "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts")
+                            .openConnection();
+                    c.setConnectTimeout(8000);
+                    c.setReadTimeout(15000);
+                    if (c.getResponseCode() == 200) {
+                        java.io.File tmp = new java.io.File(app.getFilesDir(), "adblock-hosts.tmp");
+                        java.io.PrintWriter w = new java.io.PrintWriter(new java.io.OutputStreamWriter(
+                                new java.io.FileOutputStream(tmp), "UTF-8"));
+                        BufferedReader r = new BufferedReader(
+                                new InputStreamReader(c.getInputStream(), "UTF-8"), 1 << 16);
+                        int n = 0;
+                        String line;
+                        while ((line = r.readLine()) != null) {
+                            line = line.trim();
+                            if (line.isEmpty() || line.charAt(0) == '#') continue;
+                            String[] p = line.split("\\s+");
+                            if (p.length >= 2 && (p[0].equals("0.0.0.0") || p[0].equals("127.0.0.1"))
+                                    && p[1].indexOf('.') > 0 && !p[1].equals("0.0.0.0")) {
+                                w.println(p[1].toLowerCase(Locale.ROOT));
+                                n++;
+                            }
+                        }
+                        w.close();
+                        r.close();
+                        if (n > 1000) {
+                            java.io.File dst = new java.io.File(app.getFilesDir(), "adblock-hosts.txt");
+                            dst.delete();
+                            tmp.renameTo(dst);
+                            loadHosts(app);
+                            result = hosts.size();
+                        } else {
+                            tmp.delete();
+                        }
+                    }
+                    c.disconnect();
+                } catch (Exception ignored) {
+                }
+                final int res = result;
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        cb.done(res);
+                    }
+                });
+            }
+        }, "adblock-update").start();
     }
 
     /** reqHost: host of the sub-resource; pageHost: host of the page that requested it. */

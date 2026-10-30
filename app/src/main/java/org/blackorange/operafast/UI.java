@@ -31,7 +31,13 @@ final class UI {
     static final int BG_CARD = 0xFF2E2E2E;
     static final int TEXT = 0xFFFFFFFF;
     static final int TEXT_MUTED = 0xFFA0A0A0;
-    static final int ACCENT = 0xFFFF1B2D;
+    static int ACCENT = 0xFFFF1B2D;   // changed by applyAccent() at startup
+    static final int[] ACCENTS = {0xFFFF1B2D, 0xFF3D8BFF, 0xFF2ECC71, 0xFFA66BFF, 0xFFFF9F1A, 0xFFFF4FA3};
+    static final String[] ACCENT_NAMES = {"Red", "Blue", "Green", "Purple", "Orange", "Pink"};
+
+    static void applyAccent(int index) {
+        ACCENT = ACCENTS[index >= 0 && index < ACCENTS.length ? index : 0];
+    }
     static final int GREEN = 0xFF66FF66;
     static final int ORANGE = 0xFFFFA726;
     static final int DIVIDER = 0xFF333333;
@@ -63,6 +69,10 @@ final class UI {
 
     static final String PRIVATE = "\ue8f5";
     static final String SETTINGS = "\ue8b8";
+    static final String READER = "\ue86d";
+    static final String TRANSLATE = "\ue8e2";
+    static final String TEXT_FIELDS = "\ue262";
+    static final String HOME = "\ue88a";
     static final String LOCK = "\ue897";
     static final String LOCK_OPEN = "\ue898";
     static final String SEARCH = "\ue8b6";

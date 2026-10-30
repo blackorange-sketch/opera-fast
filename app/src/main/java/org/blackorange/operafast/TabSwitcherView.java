@@ -392,7 +392,15 @@ final class TabSwitcherView extends FrameLayout {
         card.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                listener.onSelect(tab);   // one tap, whichever card it is
+                // one tap, whichever card it is; the card swells and fades into the page
+                v.setClickable(false);
+                v.animate().scaleX(1.1f).scaleY(1.1f).alpha(0f).setDuration(120)
+                        .withEndAction(new Runnable() {
+                            @Override
+                            public void run() {
+                                listener.onSelect(tab);
+                            }
+                        }).start();
             }
         });
         attachSwipeToClose(card, tab);

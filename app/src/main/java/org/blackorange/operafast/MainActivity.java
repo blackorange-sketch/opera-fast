@@ -63,6 +63,26 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private static final int REQ_NOTIF = 3;
     private static final int REQ_AUTH = 4;
     private static final int REQ_SITE = 5;
+    private static final int REQ_WALL = 7;
+    private static final String READER_JS = ""
+            + "(function(){"
+            + "function txt(e){return (e.innerText||'').trim();}"
+            + "var cands=document.querySelectorAll('article,main,[role=main],section,div'),best=null,bs=0;"
+            + "for(var i=0;i<cands.length;i++){var c=cands[i],s=0,k=c.children;"
+            + "for(var j=0;j<k.length;j++){if(k[j].tagName==='P'){var l=txt(k[j]).length;if(l>50)s+=l;}}"
+            + "if(s>bs){bs=s;best=c;}}"
+            + "if(!best||bs<200)return '';"
+            + "function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}"
+            + "var out='',els=best.querySelectorAll('h1,h2,h3,p,img,blockquote,li,pre');"
+            + "for(var i=0;i<els.length;i++){var e=els[i];"
+            + "if(e.closest('nav,aside,footer,form'))continue;"
+            + "var t=e.tagName;"
+            + "if(t==='IMG'){var u=e.currentSrc||e.src;if(u&&e.naturalWidth>200)out+='<img src=\"'+u.replace(/\"/g,'')+'\">';}"
+            + "else{var x=txt(e);if(!x||(t==='P'&&x.length<2))continue;"
+            + "var tag=t==='LI'?'p':t.toLowerCase();out+='<'+tag+'>'+esc(x)+'</'+tag+'>';}}"
+            + "return JSON.stringify({t:document.title,h:out});"
+            + "})()";
+
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT;
     private static final int WRAP = ViewGroup.LayoutParams.WRAP_CONTENT;
 
@@ -94,6 +114,14 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private LinearLayout bottomBar;
     private boolean passwordsFromSettings;
     private TextView lockIcon;
+    private TextView pullSpinner;
+    private LinearLayout snackBar;
+    private TextView snackText;
+    private Runnable snackUndo;
+    private final java.util.ArrayList<String[]> closedTabs = new java.util.ArrayList<String[]>();
+    private int scrollAcc;
+    private long barsFreeze;
+    private boolean barsHidden;
     private LinearLayout loginBar;
     private TextView loginText;
     private Runnable pendingAuth;
@@ -135,6 +163,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
         }
         PasswordStore.init(this);
         SitePerms.init(this);
+        SiteSettings.init(this);
+        UI.applyAccent(Settings.accent());
         PrivateData.wipe(this); // leftovers of a private session that was killed
 
         boolean restored = tabs.restore(
@@ -394,7 +424,16 @@ public class MainActivity extends Activity implements WebFactory.Host {
             }
         });
         content.addView(speedDial, new FrameLayout.LayoutParams(MATCH, MATCH));
-        webHost = new FrameLayout(this);
+        pullSpinner = UI.icon(this, UI.REFRESH, 20, UI.TEXT);
+        pullSpinner.setBackground(UI.rounded(0xFF3A3A44, dp(20)));
+        pullSpinner.setElevation(dp(4));
+        pullSpinner.setAlpha(0f);
+        webHost = new PullLayout(this, pullSpinner, new PullLayout.Listener() {
+            @Override
+            public void onRefresh() {
+                reloadActive();
+            }
+        });
         content.addView(webHost, new FrameLayout.LayoutParams(MATCH, MATCH));
         suggestScroll = new ScrollView(this);
         suggestScroll.setBackgroundColor(UI.BG_APP);
@@ -404,6 +443,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
         suggestList.setOrientation(LinearLayout.VERTICAL);
         suggestScroll.addView(suggestList, new ScrollView.LayoutParams(MATCH, WRAP));
         content.addView(suggestScroll, new FrameLayout.LayoutParams(MATCH, MATCH));
+        content.addView(pullSpinner, new FrameLayout.LayoutParams(dp(40), dp(40),
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL));
         rootLayout.addView(content, new LinearLayout.LayoutParams(MATCH, 0, 1f));
 
         // ---- bottom: back / forward / new tab / tabs / menu
@@ -497,6 +538,35 @@ public class MainActivity extends Activity implements WebFactory.Host {
         FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(MATCH, dp(48), Gravity.BOTTOM);
         llp.setMargins(dp(12), 0, dp(12), dp(60));
         screen.addView(loginBar, llp);
+
+        // "Tab closed - Undo" pill
+        snackBar = new LinearLayout(this);
+        snackBar.setOrientation(LinearLayout.HORIZONTAL);
+        snackBar.setGravity(Gravity.CENTER_VERTICAL);
+        snackBar.setBackground(UI.rounded(0xFF33303F, dp(24)));
+        snackBar.setElevation(dp(8));
+        snackBar.setPadding(dp(18), 0, dp(4), 0);
+        snackBar.setVisibility(View.GONE);
+        snackText = UI.label(this, "", 14, UI.TEXT);
+        snackBar.addView(snackText, new LinearLayout.LayoutParams(0, WRAP, 1f));
+        TextView undo = UI.label(this, "Undo", 14, UI.ACCENT);
+        undo.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        undo.setGravity(Gravity.CENTER);
+        undo.setBackground(UI.ripple());
+        undo.setClickable(true);
+        undo.setPadding(dp(16), 0, dp(16), 0);
+        undo.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Runnable r = snackUndo;
+                hideSnack();
+                if (r != null) r.run();
+            }
+        });
+        snackBar.addView(undo, new LinearLayout.LayoutParams(WRAP, MATCH));
+        FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(MATCH, dp(48), Gravity.BOTTOM);
+        slp.setMargins(dp(16), 0, dp(16), dp(84));
+        screen.addView(snackBar, slp);
     }
 
     // ------------------------------------------------------------------ tabs
@@ -505,6 +575,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (t == null) return;
         Tab prev = shown;
         hideLoginBar();
+        setBars(true);
         if (prev != null && prev != t) hideFindBar();
         if (prev != null && prev != t && prev.wv != null) {
             webHost.removeView(prev.wv);
@@ -637,7 +708,54 @@ public class MainActivity extends Activity implements WebFactory.Host {
         }
     }
 
+    private void showSnack(String text, Runnable undo) {
+        snackText.setText(text);
+        snackUndo = undo;
+        snackBar.setVisibility(View.VISIBLE);
+        snackBar.bringToFront();
+        snackBar.setAlpha(0f);
+        snackBar.animate().alpha(1f).setDuration(150).start();
+        ui.removeCallbacks(hideSnackRunnable);
+        ui.postDelayed(hideSnackRunnable, 4500);
+    }
+
+    private final Runnable hideSnackRunnable = new Runnable() {
+        @Override
+        public void run() {
+            hideSnack();
+        }
+    };
+
+    private void hideSnack() {
+        ui.removeCallbacks(hideSnackRunnable);
+        if (snackBar != null) snackBar.setVisibility(View.GONE);
+        snackUndo = null;
+    }
+
+    private void reopenClosed(int index) {
+        if (index < 0 || index >= closedTabs.size()) return;
+        String[] c = closedTabs.remove(index);
+        Tab nt = tabs.add(c[0], null, false);
+        nt.title = c[1];
+        if (overlay instanceof TabSwitcherView) {
+            ((TabSwitcherView) overlay).reload();
+        } else {
+            showTab(nt);
+        }
+        scheduleSave();
+    }
+
     private void closeTab(Tab t) {
+        if (!t.priv && !t.isBlank()) {
+            closedTabs.add(0, new String[]{t.url, t.title == null ? "" : t.title});
+            while (closedTabs.size() > 12) closedTabs.remove(closedTabs.size() - 1);
+            showSnack(S.t("Tab closed"), new Runnable() {
+                @Override
+                public void run() {
+                    reopenClosed(0);
+                }
+            });
+        }
         boolean wasShown = t == shown;
         destroyWebView(t);
         Tab next = tabs.close(t);
@@ -736,7 +854,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
         String text = "";
         int color = UI.TEXT;
         if (t != null && !t.isBlank()) {
-            text = UI.hostOf(t.url);
+            text = Settings.showTitle() && t.title != null && !t.title.isEmpty()
+                    ? t.title : UI.hostOf(t.url);
             if (t.url.startsWith("http://")) color = UI.ORANGE;
         }
         boolean secure = t != null && t.url != null && t.url.startsWith("https://");
@@ -1076,6 +1195,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
                     case MenuSheet.DESKTOP:
                         if (t == null) return false;
                         t.desktop = !t.desktop;
+                        SiteSettings.setDesktop(WebFactory.hostOf(t.url), t.desktop);
                         if (t.wv != null) {
                             WebFactory.applyUserAgent(t.wv, t.desktop);
                             t.wv.reload();
@@ -1116,6 +1236,21 @@ public class MainActivity extends Activity implements WebFactory.Host {
                     case MenuSheet.CLEAR:
                         confirmClearData();
                         break;
+                    case MenuSheet.RECENT:
+                        showRecentlyClosed();
+                        break;
+                    case MenuSheet.READER:
+                        startReader();
+                        break;
+                    case MenuSheet.TRANSLATE:
+                        translatePage();
+                        break;
+                    case MenuSheet.TEXT_SIZE:
+                        pickTextSize();
+                        break;
+                    case MenuSheet.ADD_HOME:
+                        addToHomeScreen();
+                        break;
                     case MenuSheet.NEW_PRIVATE:
                         newTab(true);
                         break;
@@ -1143,6 +1278,192 @@ public class MainActivity extends Activity implements WebFactory.Host {
             if (t.wv != null) WebFactory.applyDisplayPrefs(t.wv);
         }
         if (reloadShown) reloadActive();
+    }
+
+    // ------------------------------------------------------------------ scrolling bars
+
+    private void setBars(boolean show) {
+        if (show != barsHidden) return;       // already in that state
+        barsHidden = !show;
+        topBar.setVisibility(show ? View.VISIBLE : View.GONE);
+        bottomBar.setVisibility(show ? View.VISIBLE : View.GONE);
+        barsFreeze = System.currentTimeMillis() + 450;   // ignore the scroll jitter caused by resizing
+        scrollAcc = 0;
+    }
+
+    @Override
+    public void onScrolled(Tab tab, int dy, int y) {
+        if (tab != shown || !Settings.hideBars() || overlay != null || urlField.hasFocus()) return;
+        if (System.currentTimeMillis() < barsFreeze) return;
+        if (y <= dp(4)) {
+            setBars(true);
+            return;
+        }
+        scrollAcc = (dy > 0) == (scrollAcc > 0) ? scrollAcc + dy : dy;
+        if (scrollAcc > dp(48)) setBars(false);
+        else if (scrollAcc < -dp(32)) setBars(true);
+    }
+
+    // ------------------------------------------------------------------ extra page tools
+
+    private void startReader() {
+        final Tab t = shown;
+        if (t == null || t.wv == null) return;
+        t.wv.evaluateJavascript(READER_JS, new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+                try {
+                    Object o = new org.json.JSONTokener(value).nextValue();
+                    if (!(o instanceof String) || ((String) o).isEmpty()) {
+                        toast(S.t("Reader view isn't available for this page"));
+                        return;
+                    }
+                    org.json.JSONObject j = new org.json.JSONObject((String) o);
+                    String page = "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
+                            + "<style>body{background:#1a1a1a;color:#e6e6e6;font:19px/1.6 Georgia,serif;"
+                            + "max-width:680px;margin:0 auto;padding:18px}h1,h2,h3{font-family:sans-serif;line-height:1.25}"
+                            + "img{max-width:100%;height:auto;border-radius:8px}pre{white-space:pre-wrap}"
+                            + "blockquote{border-left:3px solid #666;margin:0;padding-left:14px;color:#bbb}</style></head><body>"
+                            + "<h1>" + android.text.TextUtils.htmlEncode(j.optString("t")) + "</h1>"
+                            + j.optString("h") + "</body></html>";
+                    t.wv.loadDataWithBaseURL(t.url, page, "text/html", "utf-8", t.url);
+                } catch (Exception e) {
+                    toast(S.t("Reader view isn't available for this page"));
+                }
+            }
+        });
+    }
+
+    private void translatePage() {
+        Tab t = shown;
+        if (t == null || t.isBlank()) return;
+        String lang = Settings.uk() ? "uk" : "en";
+        loadUrl(t, "https://translate.google.com/translate?sl=auto&tl=" + lang + "&u=" + Uri.encode(t.url));
+    }
+
+    private void pickTextSize() {
+        Tab t = shown;
+        if (t == null || t.isBlank()) return;
+        final String host = WebFactory.hostOf(t.url);
+        int cur = SiteSettings.zoom(host);
+        String[] names = new String[SiteSettings.ZOOMS.length];
+        int checked = 0;
+        for (int i = 0; i < names.length; i++) {
+            names[i] = SiteSettings.ZOOMS[i] + "%";
+            if (SiteSettings.ZOOMS[i] == cur) checked = i;
+        }
+        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle(S.t("Text size") + " · " + host)
+                .setSingleChoiceItems(names, checked, new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int which) {
+                        SiteSettings.setZoom(host, SiteSettings.ZOOMS[which]);
+                        Tab s = shown;
+                        if (s != null && s.wv != null) {
+                            s.wv.getSettings().setTextZoom(SiteSettings.ZOOMS[which]);
+                        }
+                        d.dismiss();
+                    }
+                }).show();
+    }
+
+    private void showRecentlyClosed() {
+        if (closedTabs.isEmpty()) {
+            toast(S.t("Nothing closed yet"));
+            return;
+        }
+        CharSequence[] items = new CharSequence[closedTabs.size()];
+        for (int i = 0; i < items.length; i++) {
+            String[] c = closedTabs.get(i);
+            items[i] = c[1].isEmpty() ? UI.hostOf(c[0]) : c[1];
+        }
+        new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle(S.t("Recently closed"))
+                .setItems(items, new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int which) {
+                        reopenClosed(which);
+                    }
+                }).show();
+    }
+
+    private void addToHomeScreen() {
+        Tab t = shown;
+        if (t == null || t.isBlank()) return;
+        try {
+            android.content.pm.ShortcutManager sm = getSystemService(android.content.pm.ShortcutManager.class);
+            if (sm == null || !sm.isRequestPinShortcutSupported()) return;
+            String host = UI.hostOf(t.url);
+            String label = t.title == null || t.title.isEmpty() ? host : t.title;
+            Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(t.url)).setClass(this, MainActivity.class);
+            android.content.pm.ShortcutInfo info = new android.content.pm.ShortcutInfo.Builder(
+                    this, "page" + Integer.toHexString(t.url.hashCode()))
+                    .setShortLabel(label.length() > 24 ? label.substring(0, 24) : label)
+                    .setLongLabel(label)
+                    .setIcon(android.graphics.drawable.Icon.createWithBitmap(shortcutIcon(t, host)))
+                    .setIntent(open)
+                    .build();
+            sm.requestPinShortcut(info, null);
+            toast(S.t("Shortcut requested"));
+        } catch (Exception e) {
+            toast(String.valueOf(e.getMessage()));
+        }
+    }
+
+    private Bitmap shortcutIcon(Tab t, String host) {
+        int size = 192;
+        Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(b);
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        p.setColor(0xFF2E2E36);
+        c.drawCircle(size / 2f, size / 2f, size / 2f, p);
+        if (t.favicon != null) {
+            c.drawBitmap(t.favicon, null, new Rect(48, 48, size - 48, size - 48), p);
+        } else {
+            p.setColor(UI.ACCENT);
+            p.setTextSize(96);
+            p.setTextAlign(android.graphics.Paint.Align.CENTER);
+            p.setFakeBoldText(true);
+            String l = host.isEmpty() ? "O" : host.substring(0, 1).toUpperCase();
+            c.drawText(l, size / 2f, size / 2f + 34, p);
+        }
+        return b;
+    }
+
+    private void pickWallpaper() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("image/*");
+        try {
+            startActivityForResult(i, REQ_WALL);
+        } catch (Exception e) {
+            toast(String.valueOf(e.getMessage()));
+        }
+    }
+
+    private void saveWallpaper(Uri uri) {
+        try {
+            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            java.io.InputStream in = getContentResolver().openInputStream(uri);
+            android.graphics.BitmapFactory.decodeStream(in, null, o);
+            in.close();
+            int target = 1280, sample = 1;
+            while (o.outWidth / (sample * 2) >= target) sample *= 2;
+            o = new android.graphics.BitmapFactory.Options();
+            o.inSampleSize = sample;
+            in = getContentResolver().openInputStream(uri);
+            Bitmap b = android.graphics.BitmapFactory.decodeStream(in, null, o);
+            in.close();
+            if (b == null) return;
+            java.io.FileOutputStream out = new java.io.FileOutputStream(
+                    new java.io.File(getFilesDir(), "wallpaper.jpg"));
+            b.compress(Bitmap.CompressFormat.JPEG, 85, out);
+            out.close();
+            speedDial.refresh();
+        } catch (Exception e) {
+            toast(String.valueOf(e.getMessage()));
+        }
     }
 
     // ------------------------------------------------------------------ security helpers
@@ -1485,6 +1806,16 @@ public class MainActivity extends Activity implements WebFactory.Host {
             public void onClearCache() {
                 clearCache();
             }
+
+            @Override
+            public void onWallpaper(boolean pick) {
+                if (pick) {
+                    pickWallpaper();
+                } else {
+                    new java.io.File(getFilesDir(), "wallpaper.jpg").delete();
+                    speedDial.refresh();
+                }
+            }
         }));
     }
 
@@ -1815,6 +2146,12 @@ public class MainActivity extends Activity implements WebFactory.Host {
                 fileCb.onReceiveValue(
                         WebChromeClient.FileChooserParams.parseResult(resultCode, data));
                 fileCb = null;
+            }
+            return;
+        }
+        if (requestCode == REQ_WALL) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                saveWallpaper(data.getData());
             }
             return;
         }

@@ -28,6 +28,8 @@ final class SettingsView extends LinearLayout {
         void onClearData();
 
         void onClearCache();
+
+        void onWallpaper(boolean pick);
     }
 
     private final Listener listener;
@@ -131,7 +133,76 @@ final class SettingsView extends LinearLayout {
                     }
                 });
 
+        row(S.t("Accent color"), S.t(UI.ACCENT_NAMES[Settings.accent() % UI.ACCENT_NAMES.length]),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        pickAccent();
+                    }
+                });
+        row(S.t("Set as default browser"), null, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    c.startActivity(new android.content.Intent(
+                            android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
+                } catch (Exception e) {
+                    c.startActivity(new android.content.Intent(
+                            android.provider.Settings.ACTION_SETTINGS));
+                }
+            }
+        });
+
+        section(S.t("Browsing"));
+        row(S.t("Hide bars while scrolling"), Settings.hideBars() ? S.t("On") : S.t("Off"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setHideBars(!Settings.hideBars());
+                        build();
+                    }
+                });
+        row(S.t("Show page title in address bar"), Settings.showTitle() ? S.t("On") : S.t("Off"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setShowTitle(!Settings.showTitle());
+                        build();
+                    }
+                });
+        final LinearLayout adRow = row(S.t("Update ad block list"),
+                AdBlock.ruleCount() + " " + S.t("rules"), null);
+        adRow.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ((TextView) adRow.getChildAt(1)).setText("…");
+                AdBlock.update(c, new AdBlock.UpdateCallback() {
+                    @Override
+                    public void done(int rules) {
+                        android.widget.Toast.makeText(c, S.t(rules >= 0
+                                ? "Ad block list updated" : "Could not update the list"),
+                                android.widget.Toast.LENGTH_SHORT).show();
+                        build();
+                    }
+                });
+            }
+        });
+
         section(S.t("Home page"));
+        row(S.t("Start page wallpaper"), null, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new AlertDialog.Builder(c, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                        .setTitle(S.t("Start page wallpaper"))
+                        .setItems(new CharSequence[]{S.t("Choose picture"), S.t("Remove")},
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface d, int which) {
+                                        listener.onWallpaper(which == 0);
+                                    }
+                                }).show();
+            }
+        });
         String home = Settings.homeUrl();
         row(S.t("Start page"), home.isEmpty() ? S.t("Speed dial") : home,
                 new View.OnClickListener() {
@@ -245,6 +316,22 @@ final class SettingsView extends LinearLayout {
                         if (codes[which].equals(Settings.lang())) return;
                         Settings.setLang(codes[which]);
                         listener.onLanguageChanged();
+                    }
+                }).show();
+    }
+
+    private void pickAccent() {
+        String[] names = new String[UI.ACCENT_NAMES.length];
+        for (int i = 0; i < names.length; i++) names[i] = S.t(UI.ACCENT_NAMES[i]);
+        new AlertDialog.Builder(getContext(), AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle(S.t("Accent color"))
+                .setSingleChoiceItems(names, Settings.accent(), new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        d.dismiss();
+                        if (which == Settings.accent()) return;
+                        Settings.setAccent(which);
+                        listener.onLanguageChanged();   // rebuild the screens with the new colour
                     }
                 }).show();
     }

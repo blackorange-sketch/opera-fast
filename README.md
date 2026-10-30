@@ -80,3 +80,9 @@ The APK is signed with the committed `android/debug.keystore`, so new builds upd
 - Saved logins are filled on request ("Fill" pill), the save bridge accepts calls from the top frame only
 - HTTPS-only mode, certificate warning dialog, lock icon in the address bar
 - Camera / microphone / location prompts with remembered answers (Settings -> Reset site permissions)
+
+## Update: tools & looks
+- Undo closed tab, "Recently closed", reader view, translate page, per-site text size and desktop mode, add to home screen
+- Hide bars while scrolling, pull-to-refresh
+- Start page: site icons, own wallpaper; accent colour; optional page title in the address bar
+- Ad block list update from the internet; shortcut to set the default browser

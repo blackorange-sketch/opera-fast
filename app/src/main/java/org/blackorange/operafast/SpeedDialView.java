@@ -3,7 +3,16 @@ package org.blackorange.operafast;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.RectF;
+import android.graphics.Shader;
+import android.graphics.drawable.Drawable;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
@@ -82,7 +91,7 @@ final class SpeedDialView extends ScrollView {
             col.addView(note, nl);
             return;
         }
-        setBackgroundColor(UI.BG_APP);
+        applyBackground();
         col.setGravity(Gravity.NO_GRAVITY);
 
         TextView title = UI.label(c, "OperaFast", 26, UI.ACCENT);
@@ -155,6 +164,14 @@ final class SpeedDialView extends ScrollView {
         String letter = sc[0].isEmpty() ? "?" : sc[0].substring(0, 1).toUpperCase();
         int color = PALETTE[Math.abs(sc[1].hashCode()) % PALETTE.length];
         View t = frame(c, letter, color, false, sc[0]);
+        final TextView circle = (TextView) t.getChildAt(0);
+        Favicons.load(c, sc[1], new Favicons.Callback() {
+            @Override
+            public void onIcon(Bitmap bmp) {
+                circle.setText("");
+                circle.setBackground(new IconDrawable(bmp));
+            }
+        });
         t.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -229,6 +246,89 @@ final class SpeedDialView extends ScrollView {
                 })
                 .setNegativeButton(S.t("Cancel"), null)
                 .show();
+    }
+
+    /** Round light tile with the site icon inset in it. */
+    private static final class IconDrawable extends Drawable {
+        private final Bitmap bmp;
+        private final Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint ico = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+
+        IconDrawable(Bitmap b) {
+            bmp = b;
+            bg.setColor(0xFFF1F1F1);
+        }
+
+        @Override
+        public void draw(Canvas c) {
+            RectF r = new RectF(getBounds());
+            c.drawOval(r, bg);
+            float inset = r.width() * 0.2f;
+            RectF d = new RectF(r.left + inset, r.top + inset, r.right - inset, r.bottom - inset);
+            c.drawBitmap(bmp, null, d, ico);
+        }
+
+        @Override
+        public void setAlpha(int a) {
+            ico.setAlpha(a);
+        }
+
+        @Override
+        public void setColorFilter(ColorFilter f) {
+            ico.setColorFilter(f);
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
+    }
+
+    /** Picture behind the speed dial, centre-cropped and dimmed so the labels stay readable. */
+    private static final class WallDrawable extends Drawable {
+        private final Bitmap bmp;
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+
+        WallDrawable(Bitmap b) {
+            bmp = b;
+        }
+
+        @Override
+        public void draw(Canvas c) {
+            android.graphics.Rect r = getBounds();
+            float s = Math.max(r.width() / (float) bmp.getWidth(), r.height() / (float) bmp.getHeight());
+            float w = bmp.getWidth() * s, h = bmp.getHeight() * s;
+            float l = r.left + (r.width() - w) / 2f, t = r.top + (r.height() - h) / 2f;
+            c.drawBitmap(bmp, null, new RectF(l, t, l + w, t + h), p);
+            c.drawColor(0x99000000);
+        }
+
+        @Override
+        public void setAlpha(int a) {
+            p.setAlpha(a);
+        }
+
+        @Override
+        public void setColorFilter(ColorFilter f) {
+            p.setColorFilter(f);
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.OPAQUE;
+        }
+    }
+
+    private void applyBackground() {
+        java.io.File f = new java.io.File(getContext().getFilesDir(), "wallpaper.jpg");
+        if (f.exists()) {
+            Bitmap b = android.graphics.BitmapFactory.decodeFile(f.getPath());
+            if (b != null) {
+                setBackground(new WallDrawable(b));
+                return;
+            }
+        }
+        setBackgroundColor(UI.BG_APP);
     }
 
     private static EditText field(Context c, String hint, int type) {

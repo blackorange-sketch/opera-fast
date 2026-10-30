@@ -34,6 +34,11 @@ final class MenuSheet extends FrameLayout {
     static final int NEW_PRIVATE = 17;
     static final int PASSWORDS = 18;
     static final int SETTINGS = 19;
+    static final int RECENT = 20;
+    static final int READER = 21;
+    static final int TRANSLATE = 22;
+    static final int ADD_HOME = 23;
+    static final int TEXT_SIZE = 24;
 
     interface Listener {
         /** Flip the setting; return its new state. */
@@ -102,11 +107,20 @@ final class MenuSheet extends FrameLayout {
                 button(c, FIND, UI.FIND, "Find in page", pageOpen, listener),
                 button(c, SHARE, UI.SHARE, "Share page", pageOpen, listener));
         addButtons(c, body, listener,
-                button(c, NEW_PRIVATE, UI.PRIVATE, "New private tab", true, listener),
-                button(c, PASSWORDS, UI.KEY, "Passwords", true, listener));
+                button(c, READER, UI.READER, "Reader view", pageOpen, listener),
+                button(c, TRANSLATE, UI.TRANSLATE, "Translate page", pageOpen, listener));
         addButtons(c, body, listener,
-                button(c, SETTINGS, UI.SETTINGS, "Settings", true, listener),
-                button(c, CLEAR, UI.DELETE, "Clear data", true, listener));
+                button(c, TEXT_SIZE, UI.TEXT_FIELDS, "Text size", pageOpen, listener),
+                button(c, ADD_HOME, UI.HOME, "Add to home screen", pageOpen, listener));
+        addButtons(c, body, listener,
+                button(c, RECENT, UI.HISTORY, "Recently closed", true, listener),
+                button(c, NEW_PRIVATE, UI.PRIVATE, "New private tab", true, listener));
+        addButtons(c, body, listener,
+                button(c, PASSWORDS, UI.KEY, "Passwords", true, listener),
+                button(c, SETTINGS, UI.SETTINGS, "Settings", true, listener));
+        addButtons(c, body, listener,
+                button(c, CLEAR, UI.DELETE, "Clear data", true, listener),
+                null);
 
         sheet.addView(body, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
