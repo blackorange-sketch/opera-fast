@@ -2146,13 +2146,39 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (t != null && t.wv != null) t.wv.findNext(forward);
     }
 
+    private static final String SNAP_JS = "(function(){var o=[];o.push('typeof jQuery='+typeof jQuery);"
+            + "var s=document.scripts;o.push('scripts='+s.length);"
+            + "for(var i=0;i<Math.min(s.length,14);i++){o.push((s[i].src||'inline')+(s[i].async?' async':'')+(s[i].defer?' defer':'')+' '+(s[i].type||''));}"
+            + "o.push('stylesheets='+document.styleSheets.length+' links='+document.querySelectorAll('link[rel=stylesheet]').length);"
+            + "o.push('sw='+(('serviceWorker' in navigator&&navigator.serviceWorker.controller)?'controlled':'none'));"
+            + "o.push('csp='+(document.querySelector('meta[http-equiv=\\'Content-Security-Policy\\']')?'meta':'-'));"
+            + "try{performance.getEntriesByType('resource').filter(function(e){return /jquery|\\.css|\\.js/i.test(e.name)}).slice(0,20).forEach(function(e){o.push('RES '+e.name+' st='+e.responseStatus+' size='+e.transferSize+' '+Math.round(e.duration)+'ms')});}catch(x){}"
+            + "return o.join('\\n')})()";
+
     private void showIssues() {
         final Tab t = shown;
         if (t == null) return;
+        if (t.wv == null) { showIssuesDialog(t, ""); return; }
+        t.wv.evaluateJavascript(SNAP_JS, new android.webkit.ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String r) {
+                String snap = "";
+                try {
+                    Object o = new org.json.JSONTokener(r).nextValue();
+                    snap = String.valueOf(o);
+                } catch (Exception e) {
+                    snap = String.valueOf(r);
+                }
+                showIssuesDialog(t, "\n---- snapshot ----\n" + snap);
+            }
+        });
+    }
+
+    private void showIssuesDialog(final Tab t, String snap) {
         String text = t.issuesText();
         if (text.isEmpty()) text = S.t("No problems recorded for this page");
         final String all = "UA: " + (t.wv == null ? "" : t.wv.getSettings().getUserAgentString())
-                + "\nURL: " + t.url + "\n\n" + text;
+                + "\nURL: " + t.url + "\n\n" + text + snap;
         TextView tv = new TextView(this);
         tv.setText(all);
         tv.setTextSize(11);
