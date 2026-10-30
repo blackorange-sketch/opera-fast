@@ -132,6 +132,7 @@ final class S {
         p("Pink", "Рожевий");
         p("Accent color", "Колір акценту");
         p("Theme", "Тема");
+        p("Download", "Завантажити");
         p("Choose folder", "Обрати папку");
         p("Use Downloads", "Стандартна (Download)");
         p("No file manager found", "Файловий менеджер не знайдено");

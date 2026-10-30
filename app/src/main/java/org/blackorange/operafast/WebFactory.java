@@ -39,7 +39,8 @@ final class WebFactory {
 
         boolean onFileChooser(ValueCallback<Uri[]> cb, WebChromeClient.FileChooserParams params);
 
-        void onDownload(Tab tab, String url, String userAgent, String contentDisposition, String mime);
+        void onDownload(Tab tab, String url, String userAgent, String contentDisposition, String mime,
+                        long length);
 
         /** Non-web scheme (mailto:, tel:, intent:, market: ...) after a user gesture. */
         void onExternalUrl(String url);
@@ -138,7 +139,7 @@ final class WebFactory {
             @Override
             public void onDownloadStart(String url, String userAgent, String contentDisposition,
                                         String mimetype, long contentLength) {
-                host.onDownload(tab, url, userAgent, contentDisposition, mimetype);
+                host.onDownload(tab, url, userAgent, contentDisposition, mimetype, contentLength);
             }
         });
         return wv;
@@ -361,12 +362,19 @@ final class WebFactory {
                 });
     }
 
-    /** The bottom bar floats over the page: leave room at the very end so the footer stays reachable. */
+    /** Room (CSS px) kept free under the floating top / bottom bars. */
+    static final int INSET_TOP = 54, INSET_BOTTOM = 56;
+
+    /** The bars float over the page: leave room at its start and end so nothing is hidden under them. */
     static void addBottomSpacer(WebView view) {
-        view.evaluateJavascript("(function(){if(document.getElementById('__of_sp'))return;"
-                + "var d=document.createElement('div');d.id='__of_sp';"
-                + "d.style.cssText='height:56px;width:1px;pointer-events:none';"
-                + "(document.body||document.documentElement).appendChild(d)})()", null);
+        view.evaluateJavascript("(function(){var b=document.body||document.documentElement;"
+                + "document.documentElement.style.scrollPaddingTop='" + INSET_TOP + "px';"
+                + "if(!document.getElementById('__of_st')){var t=document.createElement('div');"
+                + "t.id='__of_st';t.style.cssText='height:" + INSET_TOP + "px;width:1px;pointer-events:none';"
+                + "b.insertBefore(t,b.firstChild)}"
+                + "if(!document.getElementById('__of_sp')){var d=document.createElement('div');"
+                + "d.id='__of_sp';d.style.cssText='height:" + INSET_BOTTOM + "px;width:1px;pointer-events:none';"
+                + "b.appendChild(d)}})()", null);
     }
 
     private static void hybridRefresh(WebView view) {
@@ -463,6 +471,7 @@ final class WebFactory {
         public void onPageCommitVisible(WebView view, String url) {
             // soft fade-in instead of a hard cut when the new page first paints
             syncBackground(view);
+            addBottomSpacer(view);
             view.setAlpha(0.55f);
             view.animate().alpha(1f).setDuration(180).start();
         }

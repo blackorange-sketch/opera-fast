@@ -122,7 +122,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private final java.util.ArrayList<String[]> closedTabs = new java.util.ArrayList<String[]>();
     private int scrollAcc;
     private long barsFreeze;
-    private FrameLayout topHolder, bottomHolder;
+    private LinearLayout topHolder;
+    private FrameLayout bottomHolder;
     private TextView toolsBtn;
     private android.widget.PopupWindow toolsPopup;
     private android.animation.ValueAnimator barsAnim;
@@ -372,12 +373,13 @@ public class MainActivity extends Activity implements WebFactory.Host {
         urlPill.addView(toolsBtn, new LinearLayout.LayoutParams(dp(36), dp(40)));
 
         top.addView(urlPill, new LinearLayout.LayoutParams(MATCH, dp(40)));
-        topHolder = new FrameLayout(this);
-        topHolder.addView(top, new FrameLayout.LayoutParams(MATCH, WRAP));
-        rootLayout.addView(topHolder, new LinearLayout.LayoutParams(MATCH, WRAP));
+        // the top bar, progress line and find bar float over the page as one block
+        topHolder = new LinearLayout(this);
+        topHolder.setOrientation(LinearLayout.VERTICAL);
+        topHolder.addView(top, new LinearLayout.LayoutParams(MATCH, WRAP));
 
         progress = new UI.ProgressLine(this);
-        rootLayout.addView(progress, new LinearLayout.LayoutParams(MATCH, dp(2)));
+        topHolder.addView(progress, new LinearLayout.LayoutParams(MATCH, dp(2)));
 
         // ---- find-in-page bar (hidden until used)
         findBar = new LinearLayout(this);
@@ -446,7 +448,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             }
         });
         findBar.addView(findClose, new LinearLayout.LayoutParams(dp(40), MATCH));
-        rootLayout.addView(findBar, new LinearLayout.LayoutParams(MATCH, dp(46)));
+        topHolder.addView(findBar, new LinearLayout.LayoutParams(MATCH, dp(46)));
 
         // ---- middle: start page or WebView of the active tab
         FrameLayout content = new FrameLayout(this);
@@ -477,8 +479,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
         suggestList.setOrientation(LinearLayout.VERTICAL);
         suggestScroll.addView(suggestList, new ScrollView.LayoutParams(MATCH, WRAP));
         content.addView(suggestScroll, new FrameLayout.LayoutParams(MATCH, MATCH));
-        content.addView(pullSpinner, new FrameLayout.LayoutParams(dp(40), dp(40),
-                Gravity.TOP | Gravity.CENTER_HORIZONTAL));
+        FrameLayout.LayoutParams spl = new FrameLayout.LayoutParams(dp(40), dp(40),
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        spl.topMargin = dp(WebFactory.INSET_TOP);   // below the floating top bar
+        content.addView(pullSpinner, spl);
         rootLayout.addView(content, new LinearLayout.LayoutParams(MATCH, 0, 1f));
 
         // ---- bottom: back / forward / new tab / tabs / menu
@@ -536,10 +540,13 @@ public class MainActivity extends Activity implements WebFactory.Host {
         bottomHolder.addView(bottom, new FrameLayout.LayoutParams(MATCH, dp(52)));
 
         screen.addView(rootLayout, new FrameLayout.LayoutParams(MATCH, MATCH));
-        // the bottom bar floats over the page; the page gets a spacer at its end instead
+        // the bars float over the page; the page gets spacers at its start and end instead
+        screen.addView(topHolder, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.TOP));
+        topHolder.setTranslationZ(dp(3));
         screen.addView(bottomHolder, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM));
         bottomHolder.setTranslationZ(dp(3));
-        speedDial.setPadding(0, 0, 0, dp(56));
+        speedDial.setPadding(0, dp(WebFactory.INSET_TOP), 0, dp(WebFactory.INSET_BOTTOM));
+        suggestScroll.setPadding(0, dp(WebFactory.INSET_TOP), 0, 0);
         speedDial.setClipToPadding(false);
 
         // "Fill saved login" pill above the bottom bar
@@ -1108,6 +1115,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         final View v = overlay;
         if (v == null) return;
         overlay = null;
+        if (v == downloadSheet) downloadSheet = null;
         Runnable remove = new Runnable() {
             @Override
             public void run() {
@@ -1116,6 +1124,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
         };
         if (v instanceof MenuSheet) {
             ((MenuSheet) v).animateOut(remove);
+        } else if (v instanceof DownloadSheet) {
+            ((DownloadSheet) v).animateOut(remove);
         } else {
             v.animate().alpha(0f).translationY(dp(28)).setDuration(150)
                     .setInterpolator(new AccelerateInterpolator()).withEndAction(remove).start();
@@ -1341,65 +1351,31 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private void setBars(boolean show) {
         if (show != barsHidden) return;       // already in that state
         barsHidden = !show;
-        barsFreeze = System.currentTimeMillis() + 650;   // ignore the scroll jitter caused by resizing
         scrollAcc = 0;
         if (barsAnim != null) barsAnim.cancel();
-        if (show && barsTh == 0) {
-            barsTh = topBar.getHeight();
-            barsBh = bottomBar.getHeight();
-        }
-        if (!show) {   // remember the real sizes while the bars are still laid out
-            if (topBar.getHeight() > 0) barsTh = topBar.getHeight();
-            if (bottomBar.getHeight() > 0) barsBh = bottomBar.getHeight();
-        }
-        if (barsTh == 0) barsTh = dp(52);
+        if (topHolder.getHeight() > 0) barsTh = topHolder.getHeight();
+        if (bottomBar.getHeight() > 0) barsBh = bottomBar.getHeight();
+        if (barsTh == 0) barsTh = dp(WebFactory.INSET_TOP);
         if (barsBh == 0) barsBh = dp(52);
-        // One relayout up front (page gets its final size), then only cheap GPU translations.
-        layoutBars(!show);
-        applyBars(barsFrac, !show);
-        final boolean hiding = !show;
+        // Nothing is resized: the bars just slide (GPU translation) over the page.
         barsAnim = android.animation.ValueAnimator.ofFloat(barsFrac, show ? 0f : 1f);
         barsAnim.setDuration(200);
-        // hiding: the page is already resized but still covered by the bars; give the renderer a
-        // moment to paint the new area before revealing it (no white flash)
-        if (hiding) barsAnim.setStartDelay(130);
         barsAnim.setInterpolator(new android.view.animation.DecelerateInterpolator());
         barsAnim.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
             @Override
             public void onAnimationUpdate(android.animation.ValueAnimator a) {
                 barsFrac = (Float) a.getAnimatedValue();
-                applyBars(barsFrac, hiding);
+                topHolder.setTranslationY(-barsTh * barsFrac);
+                bottomBar.setTranslationY(barsBh * barsFrac);
             }
         });
         barsAnim.start();
     }
 
-    /** hiddenLayout: bar holders take no space, so the page already has its final size. */
-    private void layoutBars(boolean hiddenLayout) {
-        int h = hiddenLayout ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
-        topHolder.getLayoutParams().height = h;
-        topHolder.setClipChildren(false);
-        topHolder.setTranslationZ(dp(3));
-        bottomHolder.setTranslationZ(dp(3));
-        topHolder.requestLayout();
-        bottomHolder.requestLayout();
-    }
-
-    /** f: 0 = bars shown, 1 = hidden. */
-    private void applyBars(float f, boolean hiddenLayout) {
-        topBar.setTranslationY(-barsTh * f);
-        if (hiddenLayout) {
-            bottomBar.setTranslationY(barsBh * f);
-            contentView.setTranslationY(barsTh * (1f - f));
-        } else {
-            bottomBar.setTranslationY(barsBh * f);
-            contentView.setTranslationY(-barsTh * f);
-        }
-    }
-
     @Override
     public void onScrolled(Tab tab, int dy, int y) {
-        if (tab != shown || !Settings.hideBars() || overlay != null || urlField.hasFocus()) return;
+        if (tab != shown || !Settings.hideBars() || overlay != null || urlField.hasFocus()
+                || findBar.getVisibility() == View.VISIBLE) return;
         if (System.currentTimeMillis() < barsFreeze) return;
         if (y <= dp(4)) {
             setBars(true);
@@ -2229,7 +2205,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     // ------------------------------------------------------------------ downloads
 
-    private void startDownload(String url, String ua, String cd, String mime) {
+    private void startDownload(String url, String ua, String cd, String mime, String name) {
         if (url == null) return;
         if (url.startsWith("blob:") || url.startsWith("data:")) {
             toast(S.t("This kind of download is not supported yet"));
@@ -2238,7 +2214,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (Build.VERSION.SDK_INT < 29
                 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
-            pendingDownload = new String[]{url, ua, cd, mime};
+            pendingDownload = new String[]{url, ua, cd, mime, name};
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_STORAGE);
             return;
         }
@@ -2249,7 +2225,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
         }
         try {
-            String name = Downloads.enqueue(this, url, ua, cd, mime);
+            String name = Downloads.enqueue(this, url, ua, cd, mime, name);
             toast(S.t("Downloading ") + name);
         } catch (Exception e) {
             toast(S.t("Could not start the download"));
@@ -2264,7 +2240,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             pendingDownload = null;
             if (p == null) return;
             if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
-                startDownload(p[0], p[1], p[2], p[3]);
+                startDownload(p[0], p[1], p[2], p[3], p[4]);
             } else {
                 toast(S.t("Storage permission is needed to save files"));
             }
@@ -2371,7 +2347,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
                                     | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                     Settings.setDlFolder(tree.toString());
                     toast(S.t("Download folder changed"));
-                    showSettings();
+                    if (downloadSheet != null) downloadSheet.refreshFolder();
+                    else showSettings();
                 } catch (Exception e) {
                     toast(S.t("Could not use this folder"));
                 }
@@ -2405,9 +2382,11 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     @Override
-    public void onDownload(final Tab tab, String url, String userAgent, String contentDisposition,
-                           String mime) {
-        startDownload(url, userAgent, contentDisposition, mime);
+    public void onDownload(final Tab tab, final String url, final String userAgent,
+                           final String contentDisposition, final String mime, long length) {
+        if (url == null) return;
+        String guess = android.webkit.URLUtil.guessFileName(url, contentDisposition, mime);
+        showDownloadSheet(url, userAgent, contentDisposition, mime, guess, length);
         // a link that opened a new tab only to download leaves an empty page behind: close it
         if (tab.openerId != null && tab.title.isEmpty()) {
             screen.post(new Runnable() {
@@ -2416,6 +2395,43 @@ public class MainActivity extends Activity implements WebFactory.Host {
                     if (tabs.all().contains(tab)) closeTab(tab);
                 }
             });
+        }
+    }
+
+    private DownloadSheet downloadSheet;
+
+    private void showDownloadSheet(final String url, final String ua, final String cd,
+                                   final String mime, String name, long length) {
+        downloadSheet = new DownloadSheet(this, name, length, new DownloadSheet.Listener() {
+            @Override
+            public void onConfirm(String fileName) {
+                downloadSheet = null;
+                closeOverlay();
+                startDownload(url, ua, cd, mime, fileName);
+            }
+
+            @Override
+            public void onPickFolder() {
+                pickDownloadFolder();
+            }
+
+            @Override
+            public void onCancel() {
+                downloadSheet = null;
+                closeOverlay();
+            }
+        });
+        showOverlay(downloadSheet, false);
+    }
+
+    private void pickDownloadFolder() {
+        try {
+            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), REQ_FOLDER);
+        } catch (Exception e) {
+            toast(S.t("No file manager found"));
         }
     }
 

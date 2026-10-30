@@ -123,9 +123,10 @@ final class Downloads {
 
     /** Starts a download; returns the file name that was chosen. */
     static String enqueue(Context c, String url, String userAgent, String contentDisposition,
-                          String mime) {
+                          String mime, String forcedName) {
         init(c);
-        String name = URLUtil.guessFileName(url, contentDisposition, mime).replace('/', '_');
+        String name = forcedName != null && !forcedName.isEmpty() ? forcedName
+                : URLUtil.guessFileName(url, contentDisposition, mime).replace('/', '_');
         Item it = new Item();
         it.id = System.currentTimeMillis();
         it.url = url;

@@ -96,6 +96,9 @@ final class UI {
     static final String PLAY = "\ue037";
     static final String MORE_V = "\ue5d4";
     static final String COPY = "\ue14d";
+    static final String FOLDER = "\ue2c7";
+    static final String EDIT = "\ue3c9";
+    static final String DROP_DOWN = "\ue5c5";
     static final String QR = "\ue00a";
     static final String GLOBE = "";
 
