@@ -1,8 +1,9 @@
-bin/
-.buildozer/
-__pycache__/
-*.pyc
-.venv/
+.gradle/
+build/
+local.properties
+.idea/
+*.apk
+*.aab
 *.keystore
 
 # Standard Android debug keystore — committed for reproducible APK signatures

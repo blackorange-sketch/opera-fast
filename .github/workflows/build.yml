@@ -9,138 +9,36 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip ccache \
-            autoconf libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libtinfo5 cmake libffi-dev libssl-dev \
-            automake
-
-      - name: Install buildozer
-        run: |
-          pip install --upgrade pip
-          pip install buildozer==1.5.0 cython==0.29.36
-
-      - name: Cache buildozer global dir
-        uses: actions/cache@v4
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: ~/.buildozer
-          key: buildozer-global-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-global-${{ runner.os }}-
+          gradle-version: '8.9'
 
-      - name: Cache buildozer project dir
-        uses: actions/cache@v4
-        with:
-          path: .buildozer
-          key: buildozer-project-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-project-${{ runner.os }}-
-
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ccache-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-
-
-      - name: Configure ccache
+      - name: Build release APK
         run: |
-          ccache --max-size=2G
-          ccache --zero-stats
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-          echo "USE_CCACHE=1" >> $GITHUB_ENV
-
-      - name: Install debug keystore
-        run: |
-          # Gradle/AGP 8.x on Linux resolves the debug keystore via
-          # $XDG_CONFIG_HOME/.android/ when XDG_CONFIG_HOME is set
-          # (GH Actions sets it to /home/runner/.config). Copy our
-          # committed keystore to ALL candidate locations so every code
-          # path sees the same key.
-          mkdir -p ~/.android
-          mkdir -p ~/.config/.android
-          mkdir -p ~/.buildozer/android/platform
-          cp android/debug.keystore ~/.android/debug.keystore
-          cp android/debug.keystore ~/.config/.android/debug.keystore
-          cp android/debug.keystore ~/.buildozer/android/platform/debug.keystore
-          chmod 600 ~/.android/debug.keystore
-          chmod 600 ~/.config/.android/debug.keystore
-          chmod 600 ~/.buildozer/android/platform/debug.keystore
-          echo "=== Installed keystore everywhere ==="
-          for f in ~/.android/debug.keystore ~/.config/.android/debug.keystore ~/.buildozer/android/platform/debug.keystore; do
-            echo "--- $f ---"
-            keytool -list -v -keystore "$f" -storepass android 2>/dev/null | grep -iE "SHA256|Alias"
-          done
-
-      - name: Bump android.numeric_version to run number
-        run: |
-          sed -i "s/^android\.numeric_version.*/android.numeric_version = ${{ github.run_number }}/" buildozer.spec
-          grep -n "android.numeric_version" buildozer.spec
-
-      - name: Verify Java version
-        run: |
-          echo "JAVA_HOME=$JAVA_HOME"
-          java -version
-
-      - name: Diagnose keystore (before build)
-        run: |
-          echo "=== All debug.keystore files before build ==="
-          find ~ -name "debug.keystore" -type f 2>/dev/null | while read f; do
-            echo "--- $f ---"
-            ls -la "$f"
-            keytool -list -v -keystore "$f" -storepass android 2>/dev/null | grep -iE "SHA256|Alias"
-          done
-          echo ""
-          echo "=== p4a source: where does it look for keystore? ==="
-          grep -rn "debug.keystore" ~/.buildozer/android/platform/python-for-android/ 2>/dev/null | head -10 || echo "(p4a not downloaded yet)"
-
-      - name: Build debug APK
-        run: |
-          buildozer -v android debug
-
-      - name: Diagnose keystore (after build)
-        if: always()
-        run: |
-          echo "=== All debug.keystore files after build ==="
-          find ~ -name "debug.keystore" -type f 2>/dev/null | while read f; do
-            echo "--- $f ---"
-            ls -la "$f"
-            keytool -list -v -keystore "$f" -storepass android 2>/dev/null | grep -iE "SHA256|Alias"
-          done
-
-      - name: Show ccache stats
-        if: always()
-        run: ccache --show-stats
+          # Large offset so this build installs over the old Kivy builds as well.
+          export VERSION_CODE=$((1000000000 + GITHUB_RUN_NUMBER))
+          gradle --no-daemon assembleRelease
 
       - name: Show APK signature
         if: always()
         run: |
-          APK=$(ls bin/*.apk 2>/dev/null | head -1)
+          APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
           if [ -n "$APK" ]; then
-            echo "APK: $APK"
-            APKSIGNER=$(find ~/.buildozer/android/platform/android-sdk/build-tools -name apksigner 2>/dev/null | head -1)
+            ls -la "$APK"
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner 2>/dev/null | sort | tail -1)
             if [ -n "$APKSIGNER" ]; then
               "$APKSIGNER" verify --print-certs "$APK" || true
             fi
@@ -149,7 +47,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: operafast-debug
-          path: bin/*.apk
+          name: operafast-release
+          path: app/build/outputs/apk/release/*.apk
           retention-days: 30
           if-no-files-found: error
