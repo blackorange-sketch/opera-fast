@@ -345,9 +345,22 @@ final class WebFactory {
             applyDisplayPrefs(view);
             return;
         }
-        boolean fast = System.currentTimeMillis() - t.startedAt < 1500;   // loaded quickly = from cache
-        if (!fast || view.getScrollY() > 0 || !online(view.getContext())) return;
-        freshReload(view);
+        final boolean fast = System.currentTimeMillis() - t.startedAt < 1500;   // loaded quickly = from cache
+        if (!online(view.getContext())) return;
+        final String url = t.url;
+        t.revalidated = url;   // one check per navigation
+        final WebView v = view;
+        final Tab tab = t;
+        BgRefresh.check(view.getContext(), url, view.getSettings().getUserAgentString(),
+                new BgRefresh.Result() {
+                    @Override
+                    public void onChecked(boolean changed) {
+                        // the page text really changed on the server: only then touch the shown page
+                        if (changed && fast && tab.wv == v && url.equals(tab.url) && v.getScrollY() == 0) {
+                            freshReload(v);
+                        }
+                    }
+                });
     }
 
     /** Reload that revalidates with the server, once per navigation. */
@@ -410,6 +423,13 @@ final class WebFactory {
             }
             if (req.hasGesture()) host.onExternalUrl(u.toString());
             return true;
+        }
+
+        @Override
+        public void onPageCommitVisible(WebView view, String url) {
+            // soft fade-in instead of a hard cut when the new page first paints
+            view.setAlpha(0.55f);
+            view.animate().alpha(1f).setDuration(180).start();
         }
 
         @Override
