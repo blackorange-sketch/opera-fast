@@ -909,7 +909,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         customHolder.addView(view, new FrameLayout.LayoutParams(MATCH, MATCH));
         customCb = cb;
         screen.addView(customHolder, new FrameLayout.LayoutParams(MATCH, MATCH));
-        setImmersive(true);
+        setFullscreenMode(true);
     }
 
     @Override
@@ -917,14 +917,14 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (customHolder == null) return;
         screen.removeView(customHolder);
         customHolder = null;
-        setImmersive(false);
+        setFullscreenMode(false);
         WebChromeClient.CustomViewCallback cb = customCb;
         customCb = null;
         if (cb != null) cb.onCustomViewHidden();
     }
 
     @SuppressWarnings("deprecation")
-    private void setImmersive(boolean on) {
+    private void setFullscreenMode(boolean on) {
         getWindow().getDecorView().setSystemUiVisibility(on
                 ? View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
