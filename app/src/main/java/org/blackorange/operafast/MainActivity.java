@@ -61,10 +61,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private static final int REQ_FILE = 1;
     private static final int REQ_STORAGE = 2;
     private static final int REQ_NOTIF = 3;
-    private static final int MAX_LIVE = 4;
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT;
     private static final int WRAP = ViewGroup.LayoutParams.WRAP_CONTENT;
 
+    private int maxLive = 4;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final TabManager tabs = new TabManager();
     private Tab shown;
@@ -116,6 +116,12 @@ public class MainActivity extends Activity implements WebFactory.Host {
         super.onCreate(savedInstanceState);
         AdBlock.init(this);
         Settings.init(this);
+        android.app.ActivityManager am =
+                (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        if (am != null) {
+            maxLive = am.isLowRamDevice() ? 2 : am.getMemoryClass() >= 384 ? 7
+                    : am.getMemoryClass() >= 256 ? 5 : 4;
+        }
         PasswordStore.init(this);
         PrivateData.wipe(this); // leftovers of a private session that was killed
 
@@ -278,7 +284,12 @@ public class MainActivity extends Activity implements WebFactory.Host {
             public void onClick(View v) {
                 Tab t = shown;
                 if (t == null || t.wv == null) return;
-                if (t.loading) t.wv.stopLoading(); else t.wv.reload();
+                if (t.loading) {
+                    t.wv.stopLoading();
+                } else {
+                    WebFactory.applyDisplayPrefs(t.wv);
+                    t.wv.reload();
+                }
             }
         });
         urlPill.addView(reloadBtn, new LinearLayout.LayoutParams(dp(40), dp(40)));
@@ -468,8 +479,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (prev != t) {
             // soft cross-fade into the newly shown tab
             View enter = speedDial.getVisibility() == View.VISIBLE ? speedDial : webHost;
-            enter.setAlpha(0.25f);
-            enter.animate().alpha(1f).setDuration(180).start();
+            enter.setAlpha(0.6f);
+            enter.animate().alpha(1f).setDuration(110).start();
         }
     }
 
@@ -494,7 +505,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
         t.state = null;
         t.crashes = 0;
         showTab(t);               // creates the WebView and loads t.url if there was none
-        if (had) t.wv.loadUrl(url);
+        if (had) {
+            WebFactory.applyDisplayPrefs(t.wv);
+            t.wv.loadUrl(url);
+        }
     }
 
     private void newTab() {
@@ -574,7 +588,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         for (Tab t : tabs.all()) {
             if (t.wv != null) live++;
         }
-        while (live > MAX_LIVE) {
+        while (live > maxLive) {
             Tab victim = null;
             for (Tab t : tabs.all()) {
                 if (t == shown || t.wv == null) continue;
@@ -712,7 +726,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     private void reloadActive() {
         Tab t = shown;
-        if (t != null && t.wv != null) t.wv.reload();
+        if (t != null && t.wv != null) {
+            WebFactory.applyDisplayPrefs(t.wv);
+            t.wv.reload();
+        }
     }
 
     private void hideKeyboard() {
@@ -1187,7 +1204,34 @@ public class MainActivity extends Activity implements WebFactory.Host {
             public void onClearData() {
                 confirmClearData();
             }
+
+            @Override
+            public void onClearCache() {
+                clearCache();
+            }
         }));
+    }
+
+    private void clearCache() {
+        boolean cleared = false;
+        for (Tab t : tabs.all()) {
+            if (t.wv != null) {
+                t.wv.clearCache(true);   // shared disk cache, so one call is enough
+                cleared = true;
+                break;
+            }
+        }
+        if (!cleared) {
+            deleteTree(new java.io.File(getCacheDir(), "WebView"));
+        }
+        toast(S.t("Cache cleared"));
+    }
+
+    private static void deleteTree(java.io.File f) {
+        if (f == null || !f.exists()) return;
+        java.io.File[] kids = f.listFiles();
+        if (kids != null) for (java.io.File k : kids) deleteTree(k);
+        f.delete();
     }
 
     private void showPasswords() {

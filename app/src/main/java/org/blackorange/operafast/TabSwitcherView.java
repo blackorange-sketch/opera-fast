@@ -383,9 +383,10 @@ final class TabSwitcherView extends FrameLayout {
         card.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (position == index) listener.onSelect(tab); else snapTo(position);
+                listener.onSelect(tab);   // one tap, whichever card it is
             }
         });
+        attachSwipeToClose(card, tab);
 
         // title row: favicon / letter, title, X
         LinearLayout top = new LinearLayout(c);
@@ -425,13 +426,7 @@ final class TabSwitcherView extends FrameLayout {
             @Override
             public void onClick(View v) {
                 x.setEnabled(false);
-                card.animate().translationY(-UI.dp(c, 60)).alpha(0f).setDuration(170)
-                        .withEndAction(new Runnable() {
-                            @Override
-                            public void run() {
-                                listener.onClose(tab);
-                            }
-                        }).start();
+                dismiss(card, tab, -UI.dp(c, 60), 170);
             }
         });
         top.addView(x, new LinearLayout.LayoutParams(UI.dp(c, 40), UI.dp(c, 40)));
@@ -464,7 +459,69 @@ final class TabSwitcherView extends FrameLayout {
         return card;
     }
 
-    private View stripThumb(Tab tab, final int position) {
+    private void dismiss(View card, final Tab tab, float toY, int ms) {
+        card.animate().translationY(toY).alpha(0f).setDuration(ms)
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        listener.onClose(tab);
+                    }
+                }).start();
+    }
+
+    /** Drag a card up (or down) and let go to close the tab; short drags spring back. */
+    private void attachSwipeToClose(final View card, final Tab tab) {
+        final Context c = getContext();
+        final int slop = android.view.ViewConfiguration.get(c).getScaledTouchSlop();
+        final int threshold = UI.dp(c, 90);
+        card.setOnTouchListener(new View.OnTouchListener() {
+            private float downX, downY;
+            private boolean dragging;
+
+            @Override
+            public boolean onTouch(View v, MotionEvent e) {
+                switch (e.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        downX = e.getRawX();
+                        downY = e.getRawY();
+                        dragging = false;
+                        return false;
+                    case MotionEvent.ACTION_MOVE: {
+                        float dy = e.getRawY() - downY;
+                        float dx = e.getRawX() - downX;
+                        if (!dragging && Math.abs(dy) > slop && Math.abs(dy) > Math.abs(dx) * 1.2f) {
+                            dragging = true;
+                            v.setPressed(false);
+                            if (v.getParent() != null) {
+                                v.getParent().requestDisallowInterceptTouchEvent(true);
+                            }
+                        }
+                        if (dragging) {
+                            v.setTranslationY(dy);
+                            v.setAlpha(Math.max(0.2f, 1f - Math.abs(dy) / (threshold * 2.5f)));
+                            return true;
+                        }
+                        return false;
+                    }
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        if (!dragging) return false;
+                        dragging = false;
+                        float dy = e.getRawY() - downY;
+                        if (e.getActionMasked() == MotionEvent.ACTION_UP && Math.abs(dy) > threshold) {
+                            dismiss(v, tab, dy < 0 ? -v.getHeight() : v.getHeight(), 140);
+                        } else {
+                            v.animate().translationY(0f).alpha(1f).setDuration(160).start();
+                        }
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        });
+    }
+
+    private View stripThumb(final Tab tab, final int position) {
         Context c = getContext();
         FrameLayout f = new FrameLayout(c);
         f.setBackground(UI.rounded(0xFF1E1E26, UI.dp(c, 6)));
@@ -483,7 +540,7 @@ final class TabSwitcherView extends FrameLayout {
         f.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                snapTo(position);
+                listener.onSelect(tab);
             }
         });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UI.dp(c, 38), UI.dp(c, 62));

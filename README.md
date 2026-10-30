@@ -68,3 +68,8 @@ The APK is signed with the committed `android/debug.keystore`, so new builds upd
 ## For launchers (DynamicAI)
 - Open a search: `Intent(ACTION_WEB_SEARCH).setPackage("org.blackorange.operafast").putExtra("query", q)`; open a page: `ACTION_VIEW` + https URI with the same package.
 - Search bookmarks/history: `content://org.blackorange.operafast.search/pages?q=text&limit=6` (columns `kind`, `title`, `url`). Needs the runtime permission `org.blackorange.operafast.permission.READ_PAGES` (the user is asked once).
+
+## Update: swipe & speed
+- Swipe a card up/down in the tab switcher to close it; a single tap on any card or thumbnail opens that tab
+- More tabs kept alive on phones with enough memory; shorter tab-switch animation
+- Cache: pages open offline from the HTTP cache; optional "Prefer cache" mode; cache size and "Clear cache" in Settings

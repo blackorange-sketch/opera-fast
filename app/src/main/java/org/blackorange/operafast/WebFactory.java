@@ -73,9 +73,9 @@ final class WebFactory {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         applyUserAgent(wv, tab.desktop);
         applyDisplayPrefs(wv);
+        s.setDatabaseEnabled(true);
         if (tab.priv) {
             s.setSaveFormData(false);
-            s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         } else {
             wv.addJavascriptInterface(new PassBridge(tab, host), "OFPass");
         }
@@ -194,11 +194,33 @@ final class WebFactory {
         s.setLoadWithOverviewMode(true);
     }
 
+    private static boolean online(Context c) {
+        try {
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager)
+                    c.getSystemService(Context.CONNECTIVITY_SERVICE);
+            android.net.Network n = cm == null ? null : cm.getActiveNetwork();
+            android.net.NetworkCapabilities caps = n == null ? null : cm.getNetworkCapabilities(n);
+            return caps != null
+                    && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
     /** Night mode (dark pages) and text-only mode; called on creation and when toggled. */
     @SuppressWarnings("deprecation")
     static void applyDisplayPrefs(WebView wv) {
         WebSettings s = wv.getSettings();
         s.setLoadsImagesAutomatically(!Settings.noImages());
+        Object tag = wv.getTag();
+        if (tag instanceof Tab && ((Tab) tag).priv) {
+            s.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        } else if (Settings.cacheFirst() || !online(wv.getContext())) {
+            // faster repeat visits, and pages still open without a connection
+            s.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+        } else {
+            s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        }
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             s.setAlgorithmicDarkeningAllowed(Settings.night());
         } else if (android.os.Build.VERSION.SDK_INT >= 29) {

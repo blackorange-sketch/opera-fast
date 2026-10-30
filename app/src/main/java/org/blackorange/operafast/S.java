@@ -103,6 +103,9 @@ final class S {
         p("Search", "Пошук");
         p("Search suggestions", "Підказки пошукової системи");
         p("History and bookmarks in suggestions", "Історія й закладки в підказках");
+        p("Prefer cache", "Віддавати перевагу кешу (швидше, але сторінки можуть бути старішими)");
+        p("Clear cache", "Очистити кеш");
+        p("Cache cleared", "Кеш очищено");
         p("Language", "Мова");
         p("Automatic", "Автоматично");
         p("Search engine", "Пошукова система");

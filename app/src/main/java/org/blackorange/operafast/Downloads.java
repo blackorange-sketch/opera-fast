@@ -128,7 +128,7 @@ final class Downloads {
         }
     }
 
-    private static String size(long b) {
+    static String size(long b) {
         if (b < 1024) return b + " B";
         if (b < 1024 * 1024) return String.format(java.util.Locale.US, "%.0f KB", b / 1024.0);
         if (b < 1024L * 1024 * 1024) {

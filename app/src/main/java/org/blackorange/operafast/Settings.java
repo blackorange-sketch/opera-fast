@@ -119,6 +119,16 @@ final class Settings {
         if (prefs != null) prefs.edit().putBoolean("sugLocal", on).apply();
     }
 
+    // ---- cache: prefer stored copies of pages (faster repeat visits, may show older content)
+
+    static boolean cacheFirst() {
+        return prefs != null && prefs.getBoolean("cacheFirst", false);
+    }
+
+    static void setCacheFirst(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("cacheFirst", on).apply();
+    }
+
     // ---- passwords
 
     static boolean savePasswords() {

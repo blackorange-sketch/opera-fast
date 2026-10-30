@@ -26,6 +26,8 @@ final class SettingsView extends LinearLayout {
         void onDialChanged();
 
         void onClearData();
+
+        void onClearCache();
     }
 
     private final Listener listener;
@@ -62,7 +64,16 @@ final class SettingsView extends LinearLayout {
         list.addView(h);
     }
 
-    private void row(String title, String value, View.OnClickListener click) {
+    private static long dirSize(java.io.File f) {
+        if (f == null) return 0;
+        if (f.isFile()) return f.length();
+        long n = 0;
+        java.io.File[] kids = f.listFiles();
+        if (kids != null) for (java.io.File k : kids) n += dirSize(k);
+        return n;
+    }
+
+    private LinearLayout row(String title, String value, View.OnClickListener click) {
         Context c = getContext();
         LinearLayout r = new LinearLayout(c);
         r.setOrientation(VERTICAL);
@@ -76,6 +87,7 @@ final class SettingsView extends LinearLayout {
         r.setOnClickListener(click);
         list.addView(r, new LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return r;
     }
 
     private void build() {
@@ -151,6 +163,34 @@ final class SettingsView extends LinearLayout {
                 listener.onPasswords();
             }
         });
+        row(S.t("Prefer cache"), Settings.cacheFirst() ? S.t("On") : S.t("Off"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setCacheFirst(!Settings.cacheFirst());
+                        build();
+                    }
+                });
+        final LinearLayout cacheRow = row(S.t("Clear cache"), "…", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listener.onClearCache();
+                build();
+            }
+        });
+        final TextView cacheValue = (TextView) cacheRow.getChildAt(1);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final long bytes = dirSize(c.getCacheDir());
+                cacheValue.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        cacheValue.setText(Downloads.size(bytes));
+                    }
+                });
+            }
+        }).start();
         row(S.t("Clear data"), null, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
