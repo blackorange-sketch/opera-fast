@@ -1103,6 +1103,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         closeOverlay();
         overlay = v;
         screen.addView(v, new FrameLayout.LayoutParams(MATCH, MATCH));
+        v.setTranslationZ(dp(12));   // above the floating bars (they sit at 3dp)
         if (animate) {
             v.setAlpha(0f);
             v.setTranslationY(dp(28));
@@ -2295,6 +2296,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         customHolder.addView(view, new FrameLayout.LayoutParams(MATCH, MATCH));
         customCb = cb;
         screen.addView(customHolder, new FrameLayout.LayoutParams(MATCH, MATCH));
+        customHolder.setTranslationZ(dp(12));
         setFullscreenMode(true);
     }
 
