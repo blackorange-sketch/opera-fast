@@ -381,6 +381,9 @@ final class WebFactory {
                 | (Integer.parseInt(m.group(2)) << 8) | Integer.parseInt(m.group(3));
     }
 
+    /** Room (CSS px) kept free under the floating top / bottom bars. */
+    static final int INSET_TOP = 54, INSET_BOTTOM = 56;
+
     /** The bars float over the page: leave room at its start and end so nothing is hidden under them. */
     static void addBottomSpacer(WebView view) {
         view.evaluateJavascript("(function(){var b=document.body||document.documentElement;"
