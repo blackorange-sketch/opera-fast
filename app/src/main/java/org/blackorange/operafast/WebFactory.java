@@ -265,9 +265,8 @@ final class WebFactory {
      * swaps the platform token and drops "Mobile".
      */
     static void applyUserAgent(WebView wv, boolean desktop) {
-        String ua = WebSettings.getDefaultUserAgent(wv.getContext())
-                .replace("; wv", "")
-                .replace(" Version/4.0", "");
+        String ua = WebSettings.getDefaultUserAgent(wv.getContext());
+        if (!Settings.compat()) ua = ua.replace("; wv", "").replace(" Version/4.0", "");
         if (desktop) {
             ua = ua.replaceAll("\\(Linux; Android[^)]*\\)", "(X11; Linux x86_64)")
                     .replace(" Mobile", "");

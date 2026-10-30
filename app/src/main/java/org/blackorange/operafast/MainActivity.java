@@ -2153,6 +2153,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
             + "o.push('sw='+(('serviceWorker' in navigator&&navigator.serviceWorker.controller)?'controlled':'none'));"
             + "o.push('csp='+(document.querySelector('meta[http-equiv=\\'Content-Security-Policy\\']')?'meta':'-'));"
             + "try{performance.getEntriesByType('resource').filter(function(e){return /jquery|\\.css|\\.js/i.test(e.name)}).slice(0,20).forEach(function(e){o.push('RES '+e.name+' st='+e.responseStatus+' size='+e.transferSize+' '+Math.round(e.duration)+'ms')});}catch(x){}"
+            + "o.push('HEAD '+document.head.innerHTML.replace(/\\s+/g,' ').slice(0,1500));"
             + "return o.join('\\n')})()";
 
     private void showIssues() {
