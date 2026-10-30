@@ -73,7 +73,8 @@ final class WebFactory {
     static WebView create(Context ctx, final Tab tab, final Host host) {
         WebView wv = new WebView(ctx);
         wv.setTag(tab);
-        wv.setBackgroundColor(0xFFFFFFFF);
+        // neutral until the page paints (then syncBackground() takes the page's own colour)
+        wv.setBackgroundColor(tab.priv ? 0xFF1C1428 : UI.BG_APP);
 
         WebSettings s = wv.getSettings();
         s.setJavaScriptEnabled(true);
