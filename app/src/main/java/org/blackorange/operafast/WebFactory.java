@@ -33,6 +33,9 @@ final class WebFactory {
         /** A page called window.open(): return a tab that already has a live WebView. */
         Tab onOpenWindow(Tab opener);
 
+        /** An ad-like pop-up tab was opened; close it. */
+        void onPopupBlocked(Tab tab);
+
         void onShowCustomView(View view, WebChromeClient.CustomViewCallback cb);
 
         void onHideCustomView();
@@ -73,6 +76,13 @@ final class WebFactory {
     static WebView create(Context ctx, final Tab tab, final Host host) {
         WebView wv = new WebView(ctx);
         wv.setTag(tab);
+        wv.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, android.view.MotionEvent e) {
+                tab.lastTouch = System.currentTimeMillis();
+                return false;
+            }
+        });
         // neutral until the page paints (then syncBackground() takes the page's own colour)
         wv.setBackgroundColor(tab.priv ? 0xFF1C1428 : UI.BG_APP);
 
@@ -466,6 +476,16 @@ final class WebFactory {
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
             try {
+                if (req.isForMainFrame() && tab.openerId != null && Settings.blockPopups()
+                        && !tab.popupOk) {
+                    String h = req.getUrl().getHost();
+                    if (h != null && AdBlock.shouldBlock(h, null)) {
+                        tab.issue("POPUP blocked (ad host) " + req.getUrl());
+                        host.onPopupBlocked(tab);
+                        return new WebResourceResponse("text/plain", "utf-8",
+                                new ByteArrayInputStream(new byte[0]));
+                    }
+                }
                 if (!req.isForMainFrame()) {
                     Uri u = req.getUrl();
                     String pageHost = hostOf(tab.url);
@@ -499,6 +519,19 @@ final class WebFactory {
                 String up = upgrade(tab, u.toString());
                 if (up != null) {
                     go(view, up);
+                    return true;
+                }
+            }
+            if ((scheme.equals("http") || scheme.equals("https")) && req.isForMainFrame()
+                    && Settings.blockPopups() && tab.openerId == null && !tab.loading) {
+                String nh = u.getHost();
+                String ph = hostOf(tab.url);
+                boolean ad = nh != null && AdBlock.shouldBlock(nh, ph);
+                boolean auto = System.currentTimeMillis() - tab.lastTouch > 1500
+                        && nh != null && ph != null && !sameSite(nh, ph) && !looksLikeAuth(u.toString());
+                if (ad || auto) {
+                    tab.issue("REDIRECT blocked " + u);
+                    host.onPopupBlocked(null);
                     return true;
                 }
             }
@@ -662,6 +695,41 @@ final class WebFactory {
             tab.favicon = icon;
         }
 
+        private boolean noTouch() {
+            return Settings.blockPopups() && System.currentTimeMillis() - tab.lastTouch > 1500;
+        }
+
+        @Override
+        public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult r) {
+            if (noTouch()) {
+                tab.issue("DIALOG blocked: " + message);
+                r.cancel();
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult r) {
+            if (noTouch()) {
+                tab.issue("DIALOG blocked: " + message);
+                r.cancel();
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean onJsPrompt(WebView view, String url, String message, String def,
+                                  android.webkit.JsPromptResult r) {
+            if (noTouch()) {
+                tab.issue("DIALOG blocked: " + message);
+                r.cancel();
+                return true;
+            }
+            return false;
+        }
+
         @Override
         public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture,
                                       Message resultMsg) {
@@ -700,6 +768,36 @@ final class WebFactory {
                                          FileChooserParams params) {
             return host.onFileChooser(filePathCallback, params);
         }
+    }
+
+    /** Registrable-ish domain: "a.b.example.com" -> "example.com", "x.co.uk" -> "x.co.uk". */
+    static String siteOf(String host) {
+        if (host == null) return "";
+        String[] p = host.toLowerCase(java.util.Locale.ROOT).split("\\.");
+        int n = p.length;
+        if (n <= 2) return host.toLowerCase(java.util.Locale.ROOT);
+        boolean cc = p[n - 1].length() == 2 && p[n - 2].length() <= 3;
+        int k = cc ? 3 : 2;
+        StringBuilder sb = new StringBuilder();
+        for (int i = Math.max(0, n - k); i < n; i++) {
+            if (sb.length() > 0) sb.append('.');
+            sb.append(p[i]);
+        }
+        return sb.toString();
+    }
+
+    static boolean sameSite(String a, String b) {
+        return siteOf(a).equals(siteOf(b));
+    }
+
+    /** Sign-in / payment pop-ups are legitimate even when they point to another site. */
+    static boolean looksLikeAuth(String url) {
+        if (url == null) return false;
+        String u = url.toLowerCase(java.util.Locale.ROOT);
+        return u.contains("login") || u.contains("signin") || u.contains("sign-in")
+                || u.contains("oauth") || u.contains("auth") || u.contains("sso")
+                || u.contains("accounts.") || u.contains("pay") || u.contains("checkout")
+                || u.contains("captcha") || u.contains("recaptcha") || u.contains("consent");
     }
 
     static String hostOf(String url) {

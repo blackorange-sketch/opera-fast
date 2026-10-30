@@ -24,6 +24,8 @@ final class Tab {
     Bitmap favicon;
     Bitmap thumb;             // small screenshot for the tab switcher (taken when it opens)
     int pageColor;            // theme-color / background of the page (0 = unknown), tints the bars
+    volatile long lastTouch;  // last finger contact with the page (pop-up / dialog gating)
+    boolean popupOk;          // pop-up tab was judged legitimate
     boolean pendingShow;      // popup/new-window tab loading in the background until it has content
     boolean loading;
     long startedAt;           // when the current page load began (hybrid cache heuristic)

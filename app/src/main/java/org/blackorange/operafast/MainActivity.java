@@ -627,6 +627,11 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     private void showPending(Tab t) {
         if (!t.pendingShow || !tabs.all().contains(t)) return;
+        if (Settings.blockPopups() && t.openerId != null && !t.popupOk && adLikePopup(t)) {
+            onPopupBlocked(t);
+            return;
+        }
+        t.popupOk = true;
         showTab(t);
     }
 
@@ -2504,6 +2509,33 @@ public class MainActivity extends Activity implements WebFactory.Host {
         if (tab != shown) return;
         progress.setProgress(tab.loading || p < 100 ? p : 100);
         updateShield();
+    }
+
+    /** A pop-up that is a different site than its opener and is not a sign-in / payment step. */
+    private boolean adLikePopup(Tab t) {
+        String url = t.url;
+        if (url == null || url.isEmpty() || url.startsWith("about:")) return false;
+        String opener = null;
+        for (Tab o : tabs.all()) {
+            if (o.id.equals(t.openerId)) opener = WebFactory.hostOf(o.url);
+        }
+        String h = WebFactory.hostOf(url);
+        if (opener == null || h == null) return false;
+        return !WebFactory.sameSite(h, opener) && !WebFactory.looksLikeAuth(url);
+    }
+
+    @Override
+    public void onPopupBlocked(final Tab t) {
+        ui.post(new Runnable() {
+            @Override
+            public void run() {
+                toast(S.t("Pop-up blocked"));
+                if (t != null && tabs.all().contains(t)) {
+                    t.url = "";   // quiet close
+                    closeTab(t);
+                }
+            }
+        });
     }
 
     @Override

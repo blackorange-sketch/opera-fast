@@ -306,6 +306,14 @@ final class SettingsView extends LinearLayout {
                         build();
                     }
                 });
+        row(S.t("Block pop-ups"), Settings.blockPopups() ? S.t("On") : S.t("Off"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setBlockPopups(!Settings.blockPopups());
+                        build();
+                    }
+                });
         row(S.t("Compatibility mode"), Settings.compat() ? S.t("On") : S.t("Off"),
                 new View.OnClickListener() {
                     @Override

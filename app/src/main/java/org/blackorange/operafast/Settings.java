@@ -138,6 +138,14 @@ final class Settings {
         if (prefs != null) prefs.edit().putBoolean("cacheFirst", on).apply();
     }
 
+    static boolean blockPopups() {
+        return prefs == null || prefs.getBoolean("blockPopups", true);
+    }
+
+    static void setBlockPopups(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("blockPopups", on).apply();
+    }
+
     static boolean compat() {
         return prefs != null && prefs.getBoolean("compat", false);
     }
