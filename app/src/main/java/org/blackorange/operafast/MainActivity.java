@@ -2225,8 +2225,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
         }
         try {
-            String name = Downloads.enqueue(this, url, ua, cd, mime, name);
-            toast(S.t("Downloading ") + name);
+            String saved = Downloads.enqueue(this, url, ua, cd, mime, name);
+            toast(S.t("Downloading ") + saved);
         } catch (Exception e) {
             toast(S.t("Could not start the download"));
         }
