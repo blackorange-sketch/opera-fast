@@ -454,6 +454,9 @@ final class WebFactory {
                     String accept = req.getRequestHeaders() == null ? null
                             : req.getRequestHeaders().get("Accept");
                     boolean css = accept != null && accept.startsWith("text/css");
+                    if (accept == null || !accept.startsWith("image/")) {
+                        tab.issue("REQ " + (css ? "css " : "") + u);
+                    }
                     if (!css && AdBlock.shouldBlock(u.getHost(), pageHost)) {
                         tab.blocked.incrementAndGet();
                         tab.issue("BLOCKED " + u);

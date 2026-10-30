@@ -48,7 +48,7 @@ final class Tab {
     /** Diagnostics: failed / blocked requests and script errors of the current page. */
     void issue(String line) {
         synchronized (issues) {
-            if (issues.size() < 80) issues.add(line);
+            if (issues.size() < 200) issues.add(line);
         }
     }
 
