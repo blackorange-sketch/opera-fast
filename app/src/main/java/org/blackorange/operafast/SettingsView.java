@@ -163,6 +163,14 @@ final class SettingsView extends LinearLayout {
         });
 
         section(S.t("Browsing"));
+        row(S.t("Tint bars with page colour"), Settings.tintBars() ? S.t("On") : S.t("Off"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Settings.setTintBars(!Settings.tintBars());
+                        build();
+                    }
+                });
         row(S.t("Hide bars while scrolling"), Settings.hideBars() ? S.t("On") : S.t("Off"),
                 new View.OnClickListener() {
                     @Override

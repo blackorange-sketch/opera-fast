@@ -917,15 +917,62 @@ public class MainActivity extends Activity implements WebFactory.Host {
         fwdBtn.setAlpha(fwd ? 1f : 0.35f);
         reloadBtn.setText(t.loading ? UI.CLOSE : UI.REFRESH);
         tabCount.setCount(tabs.size());
-        int bar = t.priv ? UI.PRIV_BAR : UI.BG_BAR;
-        topBar.setBackgroundColor(bar);
-        bottomBar.setBackgroundColor(bar);
+        setBarColor(t.priv ? UI.PRIV_BAR : barColorFor(t));
         updateSecure();
         progress.setProgress(t.loading ? t.progress : 100);
         updateShield();
     }
 
     /** No screenshots / recents thumbnails while any private tab exists. */
+    /** Neutral bar colour of the theme, tinted with the hue of the page (keeps text readable). */
+    private int barColorFor(Tab t) {
+        if (!Settings.tintBars() || t.isBlank() || t.pageColor == 0) return UI.BG_BAR;
+        float[] hsv = new float[3];
+        android.graphics.Color.colorToHSV(t.pageColor, hsv);
+        if (hsv[1] < 0.15f) return UI.BG_BAR;   // grey / white / black pages: no tint
+        float s = hsv[1];
+        if (UI.light) {
+            hsv[1] = Math.min(0.14f, s * 0.2f);
+            hsv[2] = 0.97f;
+        } else {
+            hsv[1] = Math.min(0.55f, s * 0.7f);
+            hsv[2] = 0.22f;
+        }
+        return android.graphics.Color.HSVToColor(hsv);
+    }
+
+    private int barColorNow = Integer.MIN_VALUE;
+    private int barColorTarget = Integer.MIN_VALUE;
+    private android.animation.ValueAnimator barColorAnim;
+
+    private void setBarColor(final int target) {
+        if (target == barColorTarget) return;
+        barColorTarget = target;
+        if (barColorAnim != null) barColorAnim.cancel();
+        if (barColorNow == Integer.MIN_VALUE) {
+            applyBarColor(target);
+            return;
+        }
+        barColorAnim = android.animation.ValueAnimator.ofObject(
+                new android.animation.ArgbEvaluator(), barColorNow, target);
+        barColorAnim.setDuration(220);
+        barColorAnim.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(android.animation.ValueAnimator a) {
+                applyBarColor((Integer) a.getAnimatedValue());
+            }
+        });
+        barColorAnim.start();
+    }
+
+    private void applyBarColor(int c) {
+        barColorNow = c;
+        topBar.setBackgroundColor(c);
+        bottomBar.setBackgroundColor(c);
+        getWindow().setStatusBarColor(c);
+        getWindow().setNavigationBarColor(c);
+    }
+
     private void updateSecure() {
         if (tabs.privateCount() > 0) {
             getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);

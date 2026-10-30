@@ -341,30 +341,45 @@ final class WebFactory {
      * Newly exposed WebView area (when the bars slide away) is painted with the WebView's own
      * background for a frame or two: make that the page's background colour, not white.
      */
-    static void syncBackground(final WebView view) {
-        view.evaluateJavascript("(function(){function c(e){if(!e)return null;var x=getComputedStyle(e)"
-                + ".backgroundColor;return x&&x!=='rgba(0, 0, 0, 0)'&&x!=='transparent'?x:null}"
-                + "return c(document.body)||c(document.documentElement)||''})()",
+    static void syncBackground(final WebView view, final Host host) {
+        view.evaluateJavascript("(function(){function c(e){if(!e)return '';var x=getComputedStyle(e)"
+                + ".backgroundColor;return x&&x!=='rgba(0, 0, 0, 0)'&&x!=='transparent'?x:''}"
+                + "var bg=c(document.body)||c(document.documentElement);"
+                + "var m=document.querySelector('meta[name=theme-color]'),th='';"
+                + "if(m&&m.content){var i=document.createElement('i');i.style.color=m.content;"
+                + "document.documentElement.appendChild(i);th=getComputedStyle(i).color;i.remove()}"
+                + "return bg+'|'+th})()",
                 new android.webkit.ValueCallback<String>() {
                     @Override
                     public void onReceiveValue(String v) {
                         try {
-                            java.util.regex.Matcher m = java.util.regex.Pattern
-                                    .compile("(\\d+)\\D+(\\d+)\\D+(\\d+)").matcher(v == null ? "" : v);
-                            int color = 0xFFFFFFFF;
-                            if (m.find()) {
-                                color = 0xFF000000 | (Integer.parseInt(m.group(1)) << 16)
-                                        | (Integer.parseInt(m.group(2)) << 8) | Integer.parseInt(m.group(3));
+                            String s = v == null ? "" : v.replace("\"", "");
+                            int bar = s.indexOf('|');
+                            Integer bg = parseRgb(bar < 0 ? s : s.substring(0, bar));
+                            Integer th = bar < 0 ? null : parseRgb(s.substring(bar + 1));
+                            view.setBackgroundColor(bg != null ? bg : 0xFFFFFFFF);
+                            Object tag = view.getTag();
+                            if (tag instanceof Tab) {
+                                Tab t = (Tab) tag;
+                                int pc = th != null ? th : (bg != null ? bg : 0);
+                                if (pc != t.pageColor) {
+                                    t.pageColor = pc;
+                                    host.onTabState(t);
+                                }
                             }
-                            view.setBackgroundColor(color);
                         } catch (Exception ignored) {
                         }
                     }
                 });
     }
 
-    /** Room (CSS px) kept free under the floating top / bottom bars. */
-    static final int INSET_TOP = 54, INSET_BOTTOM = 56;
+    private static Integer parseRgb(String s) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(\\d+)\\D+(\\d+)\\D+(\\d+)").matcher(s == null ? "" : s);
+        if (!m.find()) return null;
+        return 0xFF000000 | (Integer.parseInt(m.group(1)) << 16)
+                | (Integer.parseInt(m.group(2)) << 8) | Integer.parseInt(m.group(3));
+    }
 
     /** The bars float over the page: leave room at its start and end so nothing is hidden under them. */
     static void addBottomSpacer(WebView view) {
@@ -471,7 +486,7 @@ final class WebFactory {
         @Override
         public void onPageCommitVisible(WebView view, String url) {
             // soft fade-in instead of a hard cut when the new page first paints
-            syncBackground(view);
+            syncBackground(view, host);
             addBottomSpacer(view);
             view.setAlpha(0.55f);
             view.animate().alpha(1f).setDuration(180).start();
@@ -504,7 +519,7 @@ final class WebFactory {
                 tab.fallbackHttp = null; // the upgrade worked
             }
             passwordHooks(view, tab, host);
-            syncBackground(view);
+            syncBackground(view, host);
             addBottomSpacer(view);
             hybridRefresh(view);
             host.onTabState(tab);

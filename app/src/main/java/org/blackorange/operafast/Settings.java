@@ -156,6 +156,14 @@ final class Settings {
         if (prefs != null) prefs.edit().putBoolean("httpsOnly", on).apply();
     }
 
+    static boolean tintBars() {
+        return prefs == null || prefs.getBoolean("tintBars", true);
+    }
+
+    static void setTintBars(boolean on) {
+        if (prefs != null) prefs.edit().putBoolean("tintBars", on).apply();
+    }
+
     static boolean hideBars() {
         return prefs == null || prefs.getBoolean("hideBars", true);
     }

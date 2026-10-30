@@ -132,6 +132,7 @@ final class S {
         p("Pink", "Рожевий");
         p("Accent color", "Колір акценту");
         p("Theme", "Тема");
+        p("Tint bars with page colour", "Фарбувати панелі в колір сторінки");
         p("Download", "Завантажити");
         p("Choose folder", "Обрати папку");
         p("Use Downloads", "Стандартна (Download)");
