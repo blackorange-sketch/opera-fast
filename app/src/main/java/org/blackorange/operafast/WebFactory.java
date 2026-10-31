@@ -326,7 +326,7 @@ final class WebFactory {
         }
     }
 
-    private static boolean online(Context c) {
+    static boolean online(Context c) {
         try {
             android.net.ConnectivityManager cm = (android.net.ConnectivityManager)
                     c.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -463,6 +463,37 @@ final class WebFactory {
         again(view);
     }
 
+    private static int typeOf(String url, String accept) {
+        if (accept != null) {
+            if (accept.startsWith("image/")) return Filters.IMAGE;
+            if (accept.startsWith("text/css")) return Filters.CSS;
+        }
+        String p = url;
+        int q = p.indexOf('?');
+        if (q > 0) p = p.substring(0, q);
+        p = p.toLowerCase(java.util.Locale.ROOT);
+        if (p.endsWith(".js") || p.endsWith(".mjs")) return Filters.SCRIPT;
+        if (p.endsWith(".png") || p.endsWith(".jpg") || p.endsWith(".jpeg") || p.endsWith(".gif")
+                || p.endsWith(".webp") || p.endsWith(".svg")) return Filters.IMAGE;
+        if (p.endsWith(".css")) return Filters.CSS;
+        if (p.endsWith(".woff") || p.endsWith(".woff2") || p.endsWith(".ttf")) return Filters.FONT;
+        if (p.endsWith(".mp4") || p.endsWith(".webm") || p.endsWith(".mp3")) return Filters.MEDIA;
+        return Filters.OTHER | Filters.XHR | Filters.SUBDOC | Filters.SCRIPT;
+    }
+
+    /** Hides ad elements known for this page with an injected stylesheet. */
+    static void cosmetic(WebView view, Tab tab) {
+        if (!AdBlock.isEnabled() || tab.url == null) return;
+        String h = hostOf(tab.url);
+        if (h == null || AdBlock.isAllowed(h)) return;
+        String css = Filters.cssFor(h);
+        if (css.isEmpty()) return;
+        view.evaluateJavascript("(function(){if(document.getElementById('__of_hide'))return;"
+                + "var s=document.createElement('style');s.id='__of_hide';s.textContent="
+                + org.json.JSONObject.quote(css)
+                + ";(document.head||document.documentElement).appendChild(s)})()", null);
+    }
+
     private static final class Client extends WebViewClient {
         private final Tab tab;
         private final Host host;
@@ -479,7 +510,9 @@ final class WebFactory {
                 if (req.isForMainFrame() && tab.openerId != null && Settings.blockPopups()
                         && !tab.popupOk) {
                     String h = req.getUrl().getHost();
-                    if (h != null && AdBlock.shouldBlock(h, null)) {
+                    if (h != null && (AdBlock.shouldBlock(h, null)
+                            || (AdBlock.isEnabled() && Filters.popupBlocked(req.getUrl().toString(),
+                            hostOf(tab.openerUrl))))) {
                         tab.issue("POPUP blocked (ad host) " + req.getUrl());
                         host.onPopupBlocked(tab);
                         return new WebResourceResponse("text/plain", "utf-8",
@@ -496,7 +529,10 @@ final class WebFactory {
                     if (accept == null || !accept.startsWith("image/")) {
                         tab.issue("REQ " + (css ? "css " : "") + u);
                     }
-                    if (!css && AdBlock.shouldBlock(u.getHost(), pageHost)) {
+                    boolean fb = !css && AdBlock.isEnabled() && !AdBlock.isAllowed(pageHost)
+                            && Filters.blocks(u.toString(), pageHost, typeOf(u.toString(), accept));
+                    if (fb) AdBlock.countBlocked();
+                    if (fb || (!css && AdBlock.shouldBlock(u.getHost(), pageHost))) {
                         tab.blocked.incrementAndGet();
                         tab.issue("BLOCKED " + u);
                         return new WebResourceResponse("text/plain", "utf-8",
@@ -565,6 +601,7 @@ final class WebFactory {
         public void onPageCommitVisible(WebView view, String url) {
             // soft fade-in instead of a hard cut when the new page first paints
             if (Settings.compat()) return;
+            cosmetic(view, tab);
             syncBackground(view, host);
             addBottomSpacer(view);
             view.setAlpha(0.55f);
@@ -605,6 +642,7 @@ final class WebFactory {
             applyDisplayPrefs(view); // back to the normal cache mode after a forced network load
             if (!Settings.compat()) {
                 passwordHooks(view, tab, host);
+                cosmetic(view, tab);
                 syncBackground(view, host);
                 addBottomSpacer(view);
                 hybridRefresh(view);

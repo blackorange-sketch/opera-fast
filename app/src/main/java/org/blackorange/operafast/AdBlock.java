@@ -37,6 +37,10 @@ final class AdBlock {
             @Override
             public void run() {
                 loadHosts(app);
+                Filters.load(app);
+                if (Filters.stale(app) && WebFactory.online(app)) {
+                    Filters.download(app);
+                }
             }
         }, "adblock-load");
         t.setPriority(Thread.MIN_PRIORITY);
@@ -132,6 +136,9 @@ final class AdBlock {
                     c.disconnect();
                 } catch (Exception ignored) {
                 }
+                boolean lists = Filters.download(app);
+                if (lists && result < 0) result = hosts.size();
+                if (result >= 0) result += Filters.ruleCount();
                 final int res = result;
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
                     @Override
@@ -177,6 +184,10 @@ final class AdBlock {
 
     static int ruleCount() {
         return hosts.size();
+    }
+
+    static void countBlocked() {
+        totalBlocked.incrementAndGet();
     }
 
     static int totalBlocked() {

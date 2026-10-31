@@ -2541,6 +2541,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     @Override
     public Tab onOpenWindow(Tab opener) {
         Tab nt = tabs.add(null, opener, opener.priv);
+        nt.openerUrl = opener.url;
         nt.wv = WebFactory.create(this, nt, this);
         // load in the background: the current page stays on screen (no white flash) and the
         // new tab is shown once it has content; a plain download never becomes visible at all

@@ -25,6 +25,7 @@ final class Tab {
     Bitmap thumb;             // small screenshot for the tab switcher (taken when it opens)
     int pageColor;            // theme-color / background of the page (0 = unknown), tints the bars
     volatile long lastTouch;  // last finger contact with the page (pop-up / dialog gating)
+    String openerUrl;         // page that opened this tab
     boolean popupOk;          // pop-up tab was judged legitimate
     boolean pendingShow;      // popup/new-window tab loading in the background until it has content
     boolean loading;
