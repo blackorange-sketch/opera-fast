@@ -2521,7 +2521,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
         }
         String h = WebFactory.hostOf(url);
         if (opener == null || h == null) return false;
-        return !WebFactory.sameSite(h, opener) && !WebFactory.looksLikeAuth(url);
+        return !WebFactory.related(h, opener) && !WebFactory.looksLikeAuth(url)
+                && !WebFactory.looksLikeFile(url);
     }
 
     @Override

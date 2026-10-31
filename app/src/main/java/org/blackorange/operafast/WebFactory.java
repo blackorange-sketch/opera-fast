@@ -564,7 +564,8 @@ final class WebFactory {
                 String ph = hostOf(tab.url);
                 boolean ad = nh != null && AdBlock.shouldBlock(nh, ph);
                 boolean auto = System.currentTimeMillis() - tab.lastTouch > 1500
-                        && nh != null && ph != null && !sameSite(nh, ph) && !looksLikeAuth(u.toString());
+                        && nh != null && ph != null && !related(nh, ph) && !looksLikeAuth(u.toString())
+                        && !looksLikeFile(u.toString());
                 if (ad || auto) {
                     tab.issue("REDIRECT blocked " + u);
                     host.onPopupBlocked(null);
@@ -826,6 +827,29 @@ final class WebFactory {
 
     static boolean sameSite(String a, String b) {
         return siteOf(a).equals(siteOf(b));
+    }
+
+    /** Same brand on another domain (github.com / githubusercontent.com, google.com / gstatic...). */
+    static boolean related(String a, String b) {
+        if (a == null || b == null) return false;
+        String x = siteOf(a), y = siteOf(b);
+        if (x.equals(y)) return true;
+        String bx = x.substring(0, x.indexOf('.') < 0 ? x.length() : x.indexOf('.'));
+        String by = y.substring(0, y.indexOf('.') < 0 ? y.length() : y.indexOf('.'));
+        if (bx.length() < 4 || by.length() < 4) return false;
+        return bx.startsWith(by) || by.startsWith(bx);
+    }
+
+    static boolean looksLikeFile(String url) {
+        if (url == null) return false;
+        String p = url;
+        int q = p.indexOf('?');
+        if (q > 0) p = p.substring(0, q);
+        p = p.toLowerCase(java.util.Locale.ROOT);
+        String[] ext = {".zip", ".apk", ".apks", ".xapk", ".obb", ".exe", ".msi", ".dmg", ".iso",
+                ".7z", ".rar", ".gz", ".tgz", ".xz", ".bz2", ".pdf", ".deb", ".rpm", ".jar", ".bin"};
+        for (String e : ext) if (p.endsWith(e)) return true;
+        return p.contains("/releases/download/") || p.contains("/archive/");
     }
 
     /** Sign-in / payment pop-ups are legitimate even when they point to another site. */
