@@ -165,6 +165,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
         AdBlock.init(this);
         Settings.init(this);
         installCrashLog();
+        installKeyboardWatcher();
         android.app.ActivityManager am =
                 (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
         if (am != null) {
@@ -1480,7 +1481,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     @Override
     public void onScrolled(Tab tab, int dy, int y) {
-        if (tab != shown || !Settings.hideBars() || overlay != null || urlField.hasFocus()
+        if (tab != shown || !Settings.hideBars() || overlay != null || urlField.hasFocus() || kbOpen
                 || findBar.getVisibility() == View.VISIBLE) return;
         if (System.currentTimeMillis() < barsFreeze) return;
         if (y <= dp(4)) {
@@ -2166,6 +2167,38 @@ public class MainActivity extends Activity implements WebFactory.Host {
             + "try{performance.getEntriesByType('resource').filter(function(e){return /jquery|\\.css|\\.js/i.test(e.name)}).slice(0,20).forEach(function(e){o.push('RES '+e.name+' st='+e.responseStatus+' size='+e.transferSize+' '+Math.round(e.duration)+'ms')});}catch(x){}"
             + "o.push('HEAD '+document.head.innerHTML.replace(/\\s+/g,' ').slice(0,1500));"
             + "return o.join('\\n')})()";
+
+    private boolean kbOpen, kbHidBars;
+
+    /**
+     * A page input (e.g. Google's search box) opens under the floating top bar: while the keyboard
+     * is up for a page field, slide the bars away so the field is visible, and bring them back after.
+     */
+    private void installKeyboardWatcher() {
+        final View decor = getWindow().getDecorView();
+        decor.getViewTreeObserver().addOnGlobalLayoutListener(
+                new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        android.graphics.Rect r = new android.graphics.Rect();
+                        decor.getWindowVisibleDisplayFrame(r);
+                        int h = decor.getRootView().getHeight();
+                        boolean kb = h > 0 && h - r.bottom > h * 0.15f;
+                        if (kb == kbOpen) return;
+                        kbOpen = kb;
+                        if (kb) {
+                            if (urlField != null && !urlField.hasFocus() && overlay == null
+                                    && shown != null && !shown.isBlank() && topHolder != null) {
+                                kbHidBars = !barsHidden;
+                                setBars(false);
+                            }
+                        } else if (kbHidBars) {
+                            kbHidBars = false;
+                            setBars(true);
+                        }
+                    }
+                });
+    }
 
     /** Keeps the stack of the last crash and offers to copy it on the next start. */
     private void installCrashLog() {
