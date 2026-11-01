@@ -628,7 +628,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     private void showPending(Tab t) {
         if (!t.pendingShow || !tabs.all().contains(t)) return;
-        if (Settings.blockPopups() && t.openerId != null && !t.popupOk && adLikePopup(t)) {
+        if (Settings.blockPopups() && t.openerId != null && !t.popupOk && adLikePopup(t) && !t.openedByTouch) {
             onPopupBlocked(t);
             return;
         }
@@ -2576,6 +2576,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     public Tab onOpenWindow(Tab opener) {
         Tab nt = tabs.add(null, opener, opener.priv);
         nt.openerUrl = opener.url;
+        nt.openedByTouch = System.currentTimeMillis() - opener.lastTouch <= 1500;
         nt.wv = WebFactory.create(this, nt, this);
         // load in the background: the current page stays on screen (no white flash) and the
         // new tab is shown once it has content; a plain download never becomes visible at all

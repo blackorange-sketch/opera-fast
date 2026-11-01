@@ -29,7 +29,6 @@ final class Filters {
             {"easylist.txt", "https://easylist.to/easylist/easylist.txt"},
             {"easyprivacy.txt", "https://easylist.to/easylist/easyprivacy.txt"},
             {"ublock.txt", "https://ublockorigin.github.io/uAssets/filters/filters.txt"},
-            {"annoyances.txt", "https://easylist.to/easylist/fanboy-annoyance.txt"},
     };
 
     private static final class Rule {
