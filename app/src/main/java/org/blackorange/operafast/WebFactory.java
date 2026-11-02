@@ -180,6 +180,10 @@ final class WebFactory {
         @android.webkit.JavascriptInterface
         public void chunk(String token, String b64, boolean last, String mime, String name) {
             if (token == null || !token.equals(tab.blobToken)) return;
+            if (b64 == null && !last) {
+                host.onBlobReady(tab, null, mime, name);
+                return;
+            }
             try {
                 if (b64 != null) {
                     byte[] part = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
@@ -207,13 +211,22 @@ final class WebFactory {
         }
     }
 
+    /** Keeps a reference to every blob the page turns into a URL: pages revoke it right after the click. */
+    static void hookBlobs(WebView view) {
+        view.evaluateJavascript("(function(){if(window.__ofb||!window.URL||!URL.createObjectURL)return;"
+                + "window.__ofb=1;var m=window.__ofBlobs={},k=[],c=URL.createObjectURL;"
+                + "URL.createObjectURL=function(o){var u=c.call(URL,o);try{if(o instanceof Blob){m[u]=o;k.push(u);"
+                + "while(k.length>6){delete m[k.shift()];}}}catch(e){}return u;};})()", null);
+    }
+
     /** Reads a blob: URL inside the page (only the page can) and hands the bytes to Java in chunks. */
     static void fetchBlob(WebView view, Tab tab, String url, String mime, String name) {
         tab.blobToken = Long.toHexString(new java.security.SecureRandom().nextLong());
         String js = "(function(){var T=" + org.json.JSONObject.quote(tab.blobToken) + ",U="
                 + org.json.JSONObject.quote(url) + ",M=" + org.json.JSONObject.quote(mime == null ? "" : mime)
                 + ",N=" + org.json.JSONObject.quote(name == null ? "" : name) + ";"
-                + "fetch(U).then(function(r){return r.blob()}).then(function(b){"
+                + "var P=(window.__ofBlobs&&window.__ofBlobs[U])?Promise.resolve(window.__ofBlobs[U]):fetch(U).then(function(r){return r.blob()});"
+                + "P.then(function(b){"
                 + "var m=M||b.type||'application/octet-stream';var S=786432,i=0;"
                 + "function next(){var e=Math.min(b.size,i+S);var fr=new FileReader();"
                 + "fr.onload=function(){var d=String(fr.result);OFBlob.chunk(T,d.substring(d.indexOf(',')+1),e>=b.size,m,N);"
@@ -688,6 +701,7 @@ final class WebFactory {
 
         @Override
         public void onPageCommitVisible(WebView view, String url) {
+            hookBlobs(view);
             // soft fade-in instead of a hard cut when the new page first paints
             if (Settings.compat()) return;
             cosmetic(view, tab);
@@ -700,6 +714,7 @@ final class WebFactory {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (url != null) tab.url = url;
+            hookBlobs(view);
             tab.loading = true;
             tab.startedAt = System.currentTimeMillis();
             if (tab.selfReload) {
@@ -729,6 +744,7 @@ final class WebFactory {
             if (tab.fallbackHttp != null && tab.url != null && tab.url.startsWith("https://")) {
                 tab.fallbackHttp = null; // the upgrade worked
             }
+            hookBlobs(view);
             applyDisplayPrefs(view); // back to the normal cache mode after a forced network load
             if (!Settings.compat()) {
                 passwordHooks(view, tab, host);

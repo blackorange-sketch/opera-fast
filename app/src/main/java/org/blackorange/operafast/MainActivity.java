@@ -2533,6 +2533,10 @@ public class MainActivity extends Activity implements WebFactory.Host {
         ui.post(new Runnable() {
             @Override
             public void run() {
+                if (data == null) {
+                    toast(S.t("Could not read the file from the page"));
+                    return;
+                }
                 saveBlob(data, mime, name);
             }
         });
