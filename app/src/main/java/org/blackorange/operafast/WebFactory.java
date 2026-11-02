@@ -282,6 +282,8 @@ final class WebFactory {
      */
     static void go(WebView v, String url) {
         if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
+            // sign-in steps carry one-time state: a cached redirect replays a dead state
+            if (looksLikeAuth(url)) v.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
             java.util.HashMap<String, String> h = new java.util.HashMap<String, String>();
             h.put("X-Requested-With", "");
             v.loadUrl(url, h);
@@ -558,6 +560,9 @@ final class WebFactory {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
             Uri u = req.getUrl();
+            if (req.isForMainFrame() && looksLikeAuth(req.getUrl().toString())) {
+                view.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+            }
             if (req.isForMainFrame()) {
                 tab.nav("OVERRIDE " + req.getMethod() + " " + u + (req.isRedirect() ? " (redirect)" : "")
                         + (req.hasGesture() ? " gesture" : ""));
