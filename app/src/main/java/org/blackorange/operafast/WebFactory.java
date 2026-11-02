@@ -39,6 +39,9 @@ final class WebFactory {
         /** The page called window.close() on a pop-up tab (sign-in windows do this when done). */
         void onCloseWindow(Tab tab);
 
+        /** Bytes of a blob: download read from the page. */
+        void onBlobReady(Tab tab, byte[] data, String mime, String name);
+
         void onShowCustomView(View view, WebChromeClient.CustomViewCallback cb);
 
         void onHideCustomView();
@@ -114,6 +117,7 @@ final class WebFactory {
         }
         wv.setOverScrollMode(View.OVER_SCROLL_NEVER);
         wv.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
+        wv.addJavascriptInterface(new BlobBridge(tab, host), "OFBlob");
         if (tab.priv) {
             s.setSaveFormData(false);
         } else {
@@ -160,6 +164,63 @@ final class WebFactory {
             }
         });
         return wv;
+    }
+
+    /** JS -> Java: receives the bytes of a blob: download read inside the page. */
+    private static final class BlobBridge {
+        private final Tab tab;
+        private final Host host;
+        private final java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+
+        BlobBridge(Tab tab, Host host) {
+            this.tab = tab;
+            this.host = host;
+        }
+
+        @android.webkit.JavascriptInterface
+        public void chunk(String token, String b64, boolean last, String mime, String name) {
+            if (token == null || !token.equals(tab.blobToken)) return;
+            try {
+                if (b64 != null) {
+                    byte[] part = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+                    synchronized (buf) {
+                        if (buf.size() + part.length > 120 * 1024 * 1024) {
+                            buf.reset();
+                            return;
+                        }
+                        buf.write(part, 0, part.length);
+                    }
+                }
+                if (last) {
+                    byte[] all;
+                    synchronized (buf) {
+                        all = buf.toByteArray();
+                        buf.reset();
+                    }
+                    host.onBlobReady(tab, all, mime, name);
+                }
+            } catch (Exception ignored) {
+                synchronized (buf) {
+                    buf.reset();
+                }
+            }
+        }
+    }
+
+    /** Reads a blob: URL inside the page (only the page can) and hands the bytes to Java in chunks. */
+    static void fetchBlob(WebView view, Tab tab, String url, String mime, String name) {
+        tab.blobToken = Long.toHexString(new java.security.SecureRandom().nextLong());
+        String js = "(function(){var T=" + org.json.JSONObject.quote(tab.blobToken) + ",U="
+                + org.json.JSONObject.quote(url) + ",M=" + org.json.JSONObject.quote(mime == null ? "" : mime)
+                + ",N=" + org.json.JSONObject.quote(name == null ? "" : name) + ";"
+                + "fetch(U).then(function(r){return r.blob()}).then(function(b){"
+                + "var m=M||b.type||'application/octet-stream';var S=786432,i=0;"
+                + "function next(){var e=Math.min(b.size,i+S);var fr=new FileReader();"
+                + "fr.onload=function(){var d=String(fr.result);OFBlob.chunk(T,d.substring(d.indexOf(',')+1),e>=b.size,m,N);"
+                + "i=e;if(e<b.size)next();};fr.readAsDataURL(b.slice(i,e));}"
+                + "if(b.size===0){OFBlob.chunk(T,'',true,m,N);}else next();"
+                + "}).catch(function(x){OFBlob.chunk(T,null,false,'','');});})()";
+        view.evaluateJavascript(js, null);
     }
 
     /** JS -> Java: only lets a page *offer* a login to be saved; nothing can be read back. */

@@ -2528,10 +2528,47 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     // ------------------------------------------------------------------ downloads
 
+    @Override
+    public void onBlobReady(Tab tab, final byte[] data, final String mime, final String name) {
+        ui.post(new Runnable() {
+            @Override
+            public void run() {
+                saveBlob(data, mime, name);
+            }
+        });
+    }
+
+    private void saveBlob(byte[] data, String mime, String name) {
+        String n = name == null || name.isEmpty() ? "download" : name;
+        if (n.indexOf('.') < 0 && mime != null && mime.contains("/")) {
+            String ext = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime);
+            if (ext != null) n = n + "." + ext;
+        }
+        Downloads.saveBytes(this, data, n.replace('/', '_'), mime);
+        toast(S.t("Download started"));
+    }
+
     private void startDownload(String url, String ua, String cd, String mime, String name) {
         if (url == null) return;
-        if (url.startsWith("blob:") || url.startsWith("data:")) {
-            toast(S.t("This kind of download is not supported yet"));
+        if (url.startsWith("data:")) {
+            try {
+                int comma = url.indexOf(',');
+                String head = url.substring(5, comma);
+                boolean b64 = head.endsWith(";base64");
+                String dm = head.contains(";") ? head.substring(0, head.indexOf(';')) : head;
+                byte[] data = b64 ? android.util.Base64.decode(url.substring(comma + 1), android.util.Base64.DEFAULT)
+                        : Uri.decode(url.substring(comma + 1)).getBytes("UTF-8");
+                saveBlob(data, dm.isEmpty() ? mime : dm, name);
+            } catch (Exception e) {
+                toast(S.t("This kind of download is not supported yet"));
+            }
+            return;
+        }
+        if (url.startsWith("blob:")) {
+            Tab bt = shown;
+            if (bt == null || bt.wv == null) return;
+            WebFactory.fetchBlob(bt.wv, bt, url, mime, name);
+            toast(S.t("Download started"));
             return;
         }
         if (Build.VERSION.SDK_INT < 29

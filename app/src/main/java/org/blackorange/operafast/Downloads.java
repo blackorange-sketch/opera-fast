@@ -144,6 +144,47 @@ final class Downloads {
         return name;
     }
 
+    /** Saves bytes the page produced itself (blob: / data: downloads) as a finished download. */
+    static void saveBytes(Context c, final byte[] data, String name, String mime) {
+        init(c);
+        final Item it = new Item();
+        it.id = System.currentTimeMillis();
+        it.url = "";
+        it.name = name;
+        it.mime = mime == null ? "" : mime;
+        it.folder = Settings.dlFolder();
+        it.time = it.id;
+        it.status = RUNNING;
+        it.total = data.length;
+        it.done = data.length;
+        synchronized (Downloads.class) {
+            items.add(it);
+            running.put(it.id, it);
+        }
+        startService();
+        pool.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    File part = partFile(it);
+                    FileOutputStream o = new FileOutputStream(part);
+                    o.write(data);
+                    o.close();
+                    finish(it, part);
+                } catch (Throwable t) {
+                    it.status = FAILED;
+                } finally {
+                    synchronized (Downloads.class) {
+                        running.remove(it.id);
+                    }
+                    persist();
+                    notifyProgress(true);
+                    if (activeCount() == 0) stopService();
+                }
+            }
+        });
+    }
+
     static synchronized List<Item> list() {
         List<Item> out = new ArrayList<Item>(items);
         Collections.sort(out, new Comparator<Item>() {

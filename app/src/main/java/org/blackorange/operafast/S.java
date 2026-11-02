@@ -66,6 +66,7 @@ final class S {
         p("Could not start the download", "Не вдалося почати завантаження");
         p("Storage permission is needed to save files", "Для збереження файлів потрібен доступ до пам'яті");
         p("This page keeps crashing", "Ця сторінка постійно падає");
+        p("Download started", "Завантаження розпочато");
         p("Downloading ", "Завантаження ");
         p("Downloading… ", "Завантаження… ");
         p("Completed", "Завершено");
