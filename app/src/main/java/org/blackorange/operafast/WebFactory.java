@@ -633,6 +633,7 @@ final class WebFactory {
                 tab.revalidated = null;
                 tab.clearIssues();
             }
+            tab.issue("NAV " + url);
             tab.progress = 0;
             tab.blocked.set(0);
             tab.favicon = favicon;
@@ -783,6 +784,7 @@ final class WebFactory {
 
         @Override
         public void onCloseWindow(WebView window) {
+            tab.issue("window.close() by the page at " + tab.url);
             host.onCloseWindow(tab);
         }
 

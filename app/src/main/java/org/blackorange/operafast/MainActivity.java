@@ -2629,6 +2629,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
 
     @Override
     public void onPopupBlocked(final Tab t) {
+        if (t != null) t.issue("pop-up closed by the blocker: " + t.url);
         ui.post(new Runnable() {
             @Override
             public void run() {
@@ -2645,6 +2646,8 @@ public class MainActivity extends Activity implements WebFactory.Host {
     public Tab onOpenWindow(Tab opener) {
         Tab nt = tabs.add(null, opener, opener.priv);
         nt.openerUrl = opener.url;
+        nt.logTo = opener;
+        opener.issue("---- pop-up opened ----");
         nt.openedByTouch = System.currentTimeMillis() - opener.lastTouch <= 1500;
         nt.wv = WebFactory.create(this, nt, this);
         // a detached WebView has no size, and pages (sign-in pop-ups!) would lay out in a 0 px

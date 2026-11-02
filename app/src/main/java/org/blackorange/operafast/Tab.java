@@ -25,6 +25,7 @@ final class Tab {
     Bitmap thumb;             // small screenshot for the tab switcher (taken when it opens)
     int pageColor;            // theme-color / background of the page (0 = unknown), tints the bars
     volatile long lastTouch;  // last finger contact with the page (pop-up / dialog gating)
+    Tab logTo;                // pop-up tabs also write their diagnostics into the opener's log
     boolean openedByTouch;    // opened right after a tap on the opener (likely a real link)
     String openerUrl;         // page that opened this tab
     int authTried;            // saved HTTP credentials already tried for this challenge
@@ -55,6 +56,8 @@ final class Tab {
         synchronized (issues) {
             if (issues.size() < 200) issues.add(line);
         }
+        Tab to = logTo;
+        if (to != null && to != this) to.issue("[popup] " + line);
     }
 
     void clearIssues() {
