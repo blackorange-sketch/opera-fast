@@ -51,6 +51,9 @@ final class WebFactory {
         /** The renderer process died (usually out of memory). */
         void onRenderGone(Tab tab);
 
+        /** Server asked for HTTP (Basic / NTLM / Digest) credentials. */
+        void onHttpAuth(Tab tab, android.webkit.HttpAuthHandler handler, String host, String realm);
+
         /** Long press on a link. */
         void onLinkLongPress(Tab tab, String url);
 
@@ -596,6 +599,12 @@ final class WebFactory {
             }
             if (req.hasGesture()) host.onExternalUrl(u.toString());
             return true;
+        }
+
+        @Override
+        public void onReceivedHttpAuthRequest(WebView view, android.webkit.HttpAuthHandler handler,
+                                              String h, String realm) {
+            host.onHttpAuth(tab, handler, h, realm);
         }
 
         @Override

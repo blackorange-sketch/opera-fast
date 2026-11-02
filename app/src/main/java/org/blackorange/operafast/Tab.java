@@ -27,6 +27,7 @@ final class Tab {
     volatile long lastTouch;  // last finger contact with the page (pop-up / dialog gating)
     boolean openedByTouch;    // opened right after a tap on the opener (likely a real link)
     String openerUrl;         // page that opened this tab
+    int authTried;            // saved HTTP credentials already tried for this challenge
     boolean popupOk;          // pop-up tab was judged legitimate
     boolean pendingShow;      // popup/new-window tab loading in the background until it has content
     boolean loading;

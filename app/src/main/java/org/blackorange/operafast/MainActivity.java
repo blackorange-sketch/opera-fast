@@ -2168,6 +2168,62 @@ public class MainActivity extends Activity implements WebFactory.Host {
             + "o.push('HEAD '+document.head.innerHTML.replace(/\\s+/g,' ').slice(0,1500));"
             + "return o.join('\\n')})()";
 
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onHttpAuth(final Tab tab, final android.webkit.HttpAuthHandler handler,
+                           final String h, final String realm) {
+        String[] saved = tab.priv || tab.wv == null ? null : tab.wv.getHttpAuthUsernamePassword(h, realm);
+        if (saved != null && saved.length == 2 && saved[0] != null && tab.authTried < 1) {
+            tab.authTried++;
+            handler.proceed(saved[0], saved[1]);
+            return;
+        }
+        tab.authTried = 0;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(8), dp(20), 0);
+        final EditText user = new EditText(this);
+        user.setHint(S.t("Username"));
+        user.setSingleLine(true);
+        user.setTextColor(UI.TEXT);
+        user.setHintTextColor(UI.TEXT_MUTED);
+        final EditText pass = new EditText(this);
+        pass.setHint(S.t("Password"));
+        pass.setSingleLine(true);
+        pass.setTextColor(UI.TEXT);
+        pass.setHintTextColor(UI.TEXT_MUTED);
+        pass.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        box.addView(user);
+        box.addView(pass);
+        new AlertDialog.Builder(this, UI.dialogTheme())
+                .setTitle(h)
+                .setMessage(realm == null || realm.isEmpty() ? S.t("Sign in") : realm)
+                .setView(box)
+                .setPositiveButton(S.t("Sign in"), new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String u = user.getText().toString();
+                        String p = pass.getText().toString();
+                        if (!tab.priv && tab.wv != null) tab.wv.setHttpAuthUsernamePassword(h, realm, u, p);
+                        handler.proceed(u, p);
+                    }
+                })
+                .setNegativeButton(S.t("Cancel"), new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        handler.cancel();
+                    }
+                })
+                .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                    @Override
+                    public void onCancel(android.content.DialogInterface d) {
+                        handler.cancel();
+                    }
+                })
+                .show();
+    }
+
     private boolean kbOpen, kbHidBars;
 
     /**
