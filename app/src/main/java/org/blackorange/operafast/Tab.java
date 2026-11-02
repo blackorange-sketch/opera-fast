@@ -60,6 +60,25 @@ final class Tab {
         if (to != null && to != this) to.issue("[popup] " + line);
     }
 
+    private final java.util.ArrayList<String> navLog = new java.util.ArrayList<String>();
+
+    /** Main-frame navigation trail (kept across page loads, unlike issues). */
+    void nav(String s) {
+        synchronized (navLog) {
+            navLog.add(new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT)
+                    .format(new java.util.Date()) + " " + s);
+            while (navLog.size() > 60) navLog.remove(0);
+        }
+    }
+
+    String navText() {
+        synchronized (navLog) {
+            StringBuilder sb = new StringBuilder();
+            for (String s : navLog) sb.append(s).append('\n');
+            return sb.toString();
+        }
+    }
+
     void clearIssues() {
         synchronized (issues) {
             issues.clear();

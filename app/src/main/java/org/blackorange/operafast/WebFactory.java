@@ -513,6 +513,10 @@ final class WebFactory {
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
             try {
+                if (req.isForMainFrame()) {
+                    tab.nav("LOAD " + req.getMethod() + " " + req.getUrl()
+                            + (req.isRedirect() ? " (redirect)" : ""));
+                }
                 if (req.isForMainFrame() && tab.openerId != null && Settings.blockPopups()
                         && !tab.popupOk) {
                     String h = req.getUrl().getHost();
@@ -554,6 +558,10 @@ final class WebFactory {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
             Uri u = req.getUrl();
+            if (req.isForMainFrame()) {
+                tab.nav("OVERRIDE " + req.getMethod() + " " + u + (req.isRedirect() ? " (redirect)" : "")
+                        + (req.hasGesture() ? " gesture" : ""));
+            }
             String scheme = u.getScheme();
             if (scheme == null) return false;
             scheme = scheme.toLowerCase(java.util.Locale.ROOT);
@@ -571,9 +579,11 @@ final class WebFactory {
                 boolean ad = nh != null && AdBlock.shouldBlock(nh, ph);
                 boolean auto = System.currentTimeMillis() - tab.lastTouch > 1500
                         && nh != null && ph != null && !related(nh, ph) && !looksLikeAuth(u.toString())
+                        && !looksLikeAuth(tab.url)
                         && !looksLikeFile(u.toString());
                 if (ad || auto) {
                     tab.issue("REDIRECT blocked " + u);
+                    tab.nav("BLOCKED redirect " + u);
                     host.onPopupBlocked(null);
                     return true;
                 }

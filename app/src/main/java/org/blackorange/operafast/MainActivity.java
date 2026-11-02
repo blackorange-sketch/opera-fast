@@ -2343,6 +2343,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     private void showIssuesDialog(final Tab t, String snap) {
         String text = t.issuesText();
         if (text.isEmpty()) text = S.t("No problems recorded for this page");
+        text = "---- navigation ----\n" + t.navText() + "\n---- page ----\n" + text;
         final String all = "UA: " + (t.wv == null ? "" : t.wv.getSettings().getUserAgentString())
                 + "\nURL: " + t.url + "\n\n" + text + snap;
         TextView tv = new TextView(this);
