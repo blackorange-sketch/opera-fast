@@ -2615,6 +2615,19 @@ public class MainActivity extends Activity implements WebFactory.Host {
     }
 
     @Override
+    public void onCloseWindow(final Tab t) {
+        ui.post(new Runnable() {
+            @Override
+            public void run() {
+                if (t != null && t.openerId != null && tabs.all().contains(t)) {
+                    t.url = "";   // quiet close, back to the page that opened it
+                    closeTab(t);
+                }
+            }
+        });
+    }
+
+    @Override
     public void onPopupBlocked(final Tab t) {
         ui.post(new Runnable() {
             @Override

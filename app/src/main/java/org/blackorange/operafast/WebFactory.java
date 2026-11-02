@@ -36,6 +36,9 @@ final class WebFactory {
         /** An ad-like pop-up tab was opened; close it. */
         void onPopupBlocked(Tab tab);
 
+        /** The page called window.close() on a pop-up tab (sign-in windows do this when done). */
+        void onCloseWindow(Tab tab);
+
         void onShowCustomView(View view, WebChromeClient.CustomViewCallback cb);
 
         void onHideCustomView();
@@ -776,6 +779,11 @@ final class WebFactory {
                 return true;
             }
             return false;
+        }
+
+        @Override
+        public void onCloseWindow(WebView window) {
+            host.onCloseWindow(tab);
         }
 
         @Override
