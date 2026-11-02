@@ -2647,6 +2647,13 @@ public class MainActivity extends Activity implements WebFactory.Host {
         nt.openerUrl = opener.url;
         nt.openedByTouch = System.currentTimeMillis() - opener.lastTouch <= 1500;
         nt.wv = WebFactory.create(this, nt, this);
+        // a detached WebView has no size, and pages (sign-in pop-ups!) would lay out in a 0 px
+        // viewport: give it the size of the page area before anything loads
+        int pw = webHost.getWidth() > 0 ? webHost.getWidth() : getResources().getDisplayMetrics().widthPixels;
+        int ph = webHost.getHeight() > 0 ? webHost.getHeight() : getResources().getDisplayMetrics().heightPixels;
+        nt.wv.measure(View.MeasureSpec.makeMeasureSpec(pw, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(ph, View.MeasureSpec.EXACTLY));
+        nt.wv.layout(0, 0, pw, ph);
         // load in the background: the current page stays on screen (no white flash) and the
         // new tab is shown once it has content; a plain download never becomes visible at all
         nt.pendingShow = true;
