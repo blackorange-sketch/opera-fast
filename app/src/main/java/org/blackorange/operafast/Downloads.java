@@ -126,7 +126,7 @@ final class Downloads {
                           String mime, String forcedName) {
         init(c);
         String name = forcedName != null && !forcedName.isEmpty() ? forcedName
-                : URLUtil.guessFileName(url, contentDisposition, mime).replace('/', '_');
+                : WebFactory.fileName(url, contentDisposition, mime);
         Item it = new Item();
         it.id = System.currentTimeMillis();
         it.url = url;

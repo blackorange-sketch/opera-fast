@@ -2814,7 +2814,7 @@ public class MainActivity extends Activity implements WebFactory.Host {
     public void onDownload(final Tab tab, final String url, final String userAgent,
                            final String contentDisposition, final String mime, long length) {
         if (url == null) return;
-        String guess = android.webkit.URLUtil.guessFileName(url, contentDisposition, mime);
+        String guess = WebFactory.fileName(url, contentDisposition, mime);
         showDownloadSheet(url, userAgent, contentDisposition, mime, guess, length);
         // a link that opened a new tab only to download leaves an empty page behind: close it
         if (tab.openerId != null && tab.title.isEmpty()) {

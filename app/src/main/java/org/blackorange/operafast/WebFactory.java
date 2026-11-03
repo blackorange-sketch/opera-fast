@@ -951,6 +951,52 @@ final class WebFactory {
         return bx.startsWith(by) || by.startsWith(bx);
     }
 
+    /**
+     * File name for a download. URLUtil.guessFileName swaps a real extension for the one of the
+     * mime type (DT.apk + application/octet-stream -> DT.bin), so the server's own name wins.
+     */
+    static String fileName(String url, String cd, String mime) {
+        String n = null;
+        try {
+            if (cd != null) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                        "filename\\*\\s*=\\s*[^']*'[^']*'([^;]+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(cd);
+                if (m.find()) {
+                    n = Uri.decode(m.group(1).trim().replace("\"", ""));
+                } else {
+                    m = java.util.regex.Pattern.compile("filename\\s*=\\s*\"?([^\";]+)\"?",
+                            java.util.regex.Pattern.CASE_INSENSITIVE).matcher(cd);
+                    if (m.find()) n = m.group(1).trim();
+                }
+            }
+        } catch (Exception ignored) {
+            n = null;
+        }
+        if (n != null) {
+            n = n.replace('/', '_').replace('\\', '_');
+            if (n.lastIndexOf('.') > 0 && n.lastIndexOf('.') < n.length() - 1) return n;
+        }
+        if (url != null && url.startsWith("http")) {
+            try {
+                String seg = Uri.parse(url).getLastPathSegment();
+                if (seg != null && seg.lastIndexOf('.') > 0 && seg.length() - seg.lastIndexOf('.') <= 6
+                        && !seg.endsWith(".php") && !seg.endsWith(".html") && !seg.endsWith(".htm")
+                        && !seg.endsWith(".aspx") && n == null) {
+                    return seg;
+                }
+            } catch (Exception ignored) {
+                // fall through
+            }
+        }
+        String g = android.webkit.URLUtil.guessFileName(url, cd, mime);
+        if (n != null && !n.isEmpty()) {
+            // name without extension: take the extension URLUtil picked for the mime type
+            int dot = g.lastIndexOf('.');
+            return dot > 0 && n.indexOf('.') < 0 ? n + g.substring(dot) : n;
+        }
+        return g.replace('/', '_');
+    }
+
     static boolean looksLikeFile(String url) {
         if (url == null) return false;
         String p = url;
